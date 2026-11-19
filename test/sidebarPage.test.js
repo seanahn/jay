@@ -34,7 +34,7 @@ const search = (p, text) => { const i = p.d.querySelector('input.search'); i.val
 test('asks for state when ready', () => { assert.deepStrictEqual(page().posted[0], { type: 'ready' }); });
 
 test('state renders groups with mine and other classes', () => {
-  const p = page(); p.send(state());
+  const p = page(); p.send(state({ columns: ['key', 'summary', 'assignee', 'status'] }));
   // Mine mode: epic DEMO-1 holds a mine item, so it is open down to the sub-task; Beta stays collapsed
   assert.deepStrictEqual(keys(p), ['DEMO-1', 'DEMO-2', 'DEMO-3', 'DEMO-4', 'DEMO-5']);
   const by = (k) => p.d.querySelector(`.row[data-key="${k}"]`);
@@ -211,7 +211,7 @@ test('under 3 characters sends nothing and clears the results', () => {
 });
 
 test('results show under a heading as flat rows, text only, minus keys already in the tree', () => {
-  const p = page(); p.send(state({ mode: 'all' }));
+  const p = page(); p.send(state({ mode: 'all', columns: ['key', 'summary', 'assignee', 'status'] }));
   search(p, 'widget'); p.advance(400);
   results(p, 1, [item('DEMO-1', 'Alpha epic'), item('OTH-7', '<img src=x onerror=alert(1)><b>hi</b>', { mine: true }), item('OTH-8', 'Plain', { who: '-', status: null })]);
   assert.strictEqual(p.d.querySelector('.tree .section').textContent, 'Jira results');
@@ -260,7 +260,7 @@ test('columns: one span per column in the given order, "-" for empties, textCont
   p.send(state({ mode: 'all', columns: ['estimate', 'key', 'summary', 'due', 'labels', 'priority', 'status', 'assignee', 'type'], groups: [{ id: 'g', title: 'T', nodes: [n] }] }));
   const row = p.d.querySelector('.row[data-key="DEMO-2"]');
   const cells = [...row.children].filter((c) => /^col-/.test(c.className));
-  assert.deepStrictEqual(cells.map((c) => c.className), ['col-estimate', 'col-key', 'col-summary', 'col-due', 'col-labels', 'col-priority', 'col-status', 'col-assignee me', 'col-type']);
+  assert.deepStrictEqual(cells.map((c) => c.className), ['col-estimate', 'col-key owner-none', 'col-summary', 'col-due', 'col-labels', 'col-priority', 'col-status', 'col-assignee me', 'col-type']);
   assert.deepStrictEqual(cells.map((c) => c.textContent), ['-', '2', '<b>x</b>', '2027-03-31', 'a, b', '-', '', 'me', 'Task']);
   assert.strictEqual(row.querySelector('b'), null);
   assert.ok(row.classList.contains('mine'));
@@ -269,17 +269,17 @@ test('columns: one span per column in the given order, "-" for empties, textCont
 test('columns: a narrower list renders only those cells; search rows use the same columns', () => {
   const p = page(); p.send(state({ mode: 'all', columns: ['key', 'summary', 'priority'] }));
   const first = p.d.querySelector('.tree .row');
-  assert.deepStrictEqual([...first.children].filter((c) => /^col-/.test(c.className)).map((c) => c.className), ['col-key', 'col-summary', 'col-priority']);
+  assert.deepStrictEqual([...first.children].filter((c) => /^col-/.test(c.className)).map((c) => c.className), ['col-key owner-none', 'col-summary', 'col-priority']);
   search(p, 'widget'); p.advance(400);
   results(p, 1, [item('OTH-7', 'Plain', { priority: 'High', type: 'Bug', labels: [], estimate: '1d' })]);
   const [r] = jiraRows(p);
   assert.deepStrictEqual([...r.children].filter((c) => /^col-/.test(c.className)).map((c) => c.textContent), ['OTH-7', 'Plain', 'High']);
 });
 
-test('columns: a state without columns uses the default four', () => {
+test('columns: a state without columns uses the default three, no assignee', () => {
   const p = page(); p.send(state());
   const first = p.d.querySelector('.tree .row');
-  assert.deepStrictEqual([...first.children].filter((c) => /^col-/.test(c.className)).map((c) => c.className), ['col-key', 'col-summary', 'col-assignee', 'col-status']);
+  assert.deepStrictEqual([...first.children].filter((c) => /^col-/.test(c.className)).map((c) => c.className.replace(/ owner-\w+/, '')), ['col-key', 'col-summary', 'col-status']);
 });
 
 test('period picker: sprint choices, a picker note, and the aria label follows the mode', () => {
@@ -438,7 +438,7 @@ test('picker: Recent goes away once text is typed; recent is not repeated under 
 });
 
 test("assignee cell: 'me' in green when mine, first name otherwise, '-' when unassigned (tree and search rows)", () => {
-  const p = page(); p.send(state({ groups: [{ id: 'g', title: null, nodes: [
+  const p = page(); p.send(state({ columns: ['key', 'summary', 'assignee', 'status'], groups: [{ id: 'g', title: null, nodes: [
     node('DEMO-7', 'Mine one', { mine: true, who: 'Cy' }), node('DEMO-8', 'Nobody', { who: null })] }] }));
   const cell = (k) => p.d.querySelector(`.row[data-key="${k}"] .col-assignee`);
   assert.strictEqual(cell('DEMO-7').textContent, 'me'); assert.ok(cell('DEMO-7').classList.contains('me'));
@@ -465,12 +465,33 @@ test('key cell shows only the number in the selected project, the full key elsew
   assert.strictEqual(j.find((r) => r.dataset.key === 'DEMO-90').querySelector('.col-key').textContent, '90');
 });
 
-test('every row has a tooltip with the full key and summary', () => {
-  const p = page(); p.send(state());
-  assert.strictEqual(p.d.querySelector('.row[data-key="DEMO-2"]').getAttribute('title'), 'DEMO-2 Build the widget');
+test('every row has a multi-line tooltip; optional lines only when set', () => {
+  const p = page();
+  p.send(state({ groups: [{ id: 'g', title: null, nodes: [
+    node('DEMO-2', 'Build the widget', { type: 'Task', assignee: 'Ann Example', statusName: 'In Progress', owner: 'me' }),
+    node('DEMO-8', '<b>Full</b>', { type: 'Bug', assignee: null, statusName: 'To Do', owner: 'none', priority: 'High', due: '2027-03-31', estimate: '2d 4h', labels: ['a', 'b'] })] }] }));
+  assert.strictEqual(p.d.querySelector('.row[data-key="DEMO-2"]').getAttribute('title'),
+    'DEMO-2 · Task\nBuild the widget\nAssignee: Ann Example\nStatus: In Progress');
+  assert.strictEqual(p.d.querySelector('.row[data-key="DEMO-8"]').getAttribute('title'),
+    'DEMO-8 · Bug\n<b>Full</b>\nAssignee: Unassigned\nStatus: To Do\nPriority: High\nDue: 2027-03-31\nEstimate: 2d 4h\nLabels: a, b');
   search(p, 'widget'); p.advance(400);
-  results(p, 1, [node('OTH-77', 'Elsewhere')]);
-  assert.strictEqual(jiraRows(p)[0].getAttribute('title'), 'OTH-77 Elsewhere');
+  results(p, 1, [item('OTH-77', 'Elsewhere', { type: 'Task', assignee: 'Bo Sample', statusName: 'To Do', owner: 'other', labels: [] })]);
+  assert.strictEqual(jiraRows(p)[0].getAttribute('title'), 'OTH-77 · Task\nElsewhere\nAssignee: Bo Sample\nStatus: To Do');
+});
+
+test('the key cell carries owner-me / owner-other / owner-none, in the tree and in Jira results', () => {
+  const p = page();
+  p.send(state({ groups: [{ id: 'g', title: null, nodes: [node('DEMO-2', 'a', { owner: 'me' }), node('DEMO-3', 'b', { owner: 'other' }), node('DEMO-4', 'c', { owner: 'none' })] }] }));
+  const cls = (k) => p.d.querySelector(`.row[data-key="${k}"] .col-key`).className;
+  assert.strictEqual(cls('DEMO-2'), 'col-key owner-me'); assert.strictEqual(cls('DEMO-3'), 'col-key owner-other'); assert.strictEqual(cls('DEMO-4'), 'col-key owner-none');
+  search(p, 'widget'); p.advance(400);
+  results(p, 1, [item('OTH-7', 'x', { owner: 'none' })]);
+  assert.ok(jiraRows(p)[0].querySelector('.col-key').classList.contains('owner-none'));
+});
+
+test('css colors the key by owner and beats the grey other-row color', () => {
+  for (const [o, c] of [['me', 'green'], ['other', 'blue'], ['none', 'orange']])
+    assert.match(CSS, new RegExp(`\\.row \\.col-key\\.owner-${o}\\s*\\{[^}]*color:\\s*var\\(--vscode-charts-${c}\\)`));
 });
 
 test('clicking a row with a short key still posts the full key', () => {

@@ -117,7 +117,7 @@
 
   function allKeys(nodes, out) { for (const n of nodes) { out.add(n.key.toLowerCase()); allKeys(n.children, out); } return out; }
 
-  const DEFAULT_COLUMNS = ['key', 'summary', 'assignee', 'status'];
+  const DEFAULT_COLUMNS = ['key', 'summary', 'status'];
   const columnList = () => (Array.isArray(state.columns) && state.columns.length ? state.columns : DEFAULT_COLUMNS);
   const orDash = (v) => (v === undefined || v === null || v === '' ? '-' : String(v));
   function cellText(n, c) {
@@ -135,6 +135,16 @@
     }
   }
 
+  function tooltip(n) {
+    const lines = [n.key + ' · ' + orDash(n.type), orDash(n.summary), 'Assignee: ' + (n.assignee || 'Unassigned'), 'Status: ' + orDash(n.statusName)];
+    if (n.priority) lines.push('Priority: ' + n.priority);
+    if (n.due) lines.push('Due: ' + n.due);
+    if (n.estimate) lines.push('Estimate: ' + n.estimate);
+    if (Array.isArray(n.labels) && n.labels.length) lines.push('Labels: ' + n.labels.join(', '));
+    return lines.join('\n');
+  }
+  const OWNERS = ['me', 'other', 'none'];
+
   function rowFor(n, depth) {
     const ev = (state.events || {})[n.key] || {};
     const row = el('div', 'row depth' + Math.min(depth, 2));
@@ -143,10 +153,10 @@
     if (ev.bold) row.classList.add('bold');
     if (ev.mention) row.classList.add('pulse');
     if (ev.newEpic) row.classList.add('new');
-    row.dataset.key = n.key; row.setAttribute('role', 'treeitem'); row.setAttribute('title', n.key + ' ' + (n.summary || ''));
+    row.dataset.key = n.key; row.setAttribute('role', 'treeitem'); row.setAttribute('title', tooltip(n));
     const twisty = el('span', 'twisty', ''); twisty.dataset.toggle = n.key;
     row.append(twisty);
-    for (const c of columnList()) row.append(el('span', 'col-' + c + (c === 'assignee' && n.mine ? ' me' : ''), cellText(n, c)));
+    for (const c of columnList()) row.append(el('span', 'col-' + c + (c === 'assignee' && n.mine ? ' me' : '') + (c === 'key' ? ' owner-' + (OWNERS.includes(n.owner) ? n.owner : 'none') : ''), cellText(n, c)));
     if (ev.newEpic) row.append(el('span', 'newmark', 'new'));
     return row;
   }

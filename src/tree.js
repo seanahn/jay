@@ -20,15 +20,20 @@ const firstName = (a) => (a ? String(a.displayName || '').trim().split(/\s+/)[0]
 const columnsOf = (i) => ({
   type: i.type || null, priority: (i.priority && i.priority.name) || null, due: i.duedate || null, labels: i.labels || [], estimate: i.estimate || null,
 });
+// what the row tooltip shows, and who has the ticket: 'none' when unassigned or assigned to a placeholder
+const tipOf = (i, meId, placeholders) => ({
+  assignee: (i.assignee && i.assignee.displayName) || null, statusName: (i.status && i.status.name) || null,
+  owner: !i.assignee || isPlaceholder(i.assignee, placeholders) ? 'none' : i.assignee.accountId === meId ? 'me' : 'other',
+});
 const kids = (children, key) => (children.get(key) || []).slice().sort(byKeyAsc);
 
-function nodeOf(issue, kind, children, meId) {
+function nodeOf(issue, kind, children, meId, placeholders) {
   const cat = issue.status && issue.status.category;
   return {
-    key: issue.key, summary: issue.summary, who: firstName(issue.assignee), ...columnsOf(issue),
+    key: issue.key, summary: issue.summary, who: firstName(issue.assignee), ...columnsOf(issue), ...tipOf(issue, meId, placeholders),
     status: cat === 'new' ? null : (issue.status && issue.status.name) || null, done: cat === 'done',
     mine: !!issue.assignee && issue.assignee.accountId === meId, kind,
-    children: kids(children, issue.key).map((c) => nodeOf(c, c.isSubtask ? 'subtask' : 'task', children, meId)),
+    children: kids(children, issue.key).map((c) => nodeOf(c, c.isSubtask ? 'subtask' : 'task', children, meId, placeholders)),
   };
 }
 const hasMine = (n) => n.mine || n.children.some(hasMine);
@@ -39,8 +44,8 @@ const NOEPIC = '__noepic__';
 function buildTree({ epics, children, meId, mode, placeholders }) {
   const sorted = epics.slice().sort(byDueThenKeyDesc);
   const claimed = new Map(sorted.map((e) => [e, !(!e.assignee || isPlaceholder(e.assignee, placeholders))]));
-  const nodes = new Map(sorted.map((e) => [e, nodeOf(e, 'epic', children, meId)]));
-  const loose = kids(children, NOEPIC).map((c) => nodeOf(c, c.isSubtask ? 'subtask' : 'task', children, meId));
+  const nodes = new Map(sorted.map((e) => [e, nodeOf(e, 'epic', children, meId, placeholders)]));
+  const loose = kids(children, NOEPIC).map((c) => nodeOf(c, c.isSubtask ? 'subtask' : 'task', children, meId, placeholders));
   const noEpic = (list) => (list.length ? [{ id: 'noepic', title: 'No epic', nodes: list }] : []);
   if (mode !== 'all') {
     const mine = sorted.map((e) => nodes.get(e)).filter(hasMine);
@@ -65,4 +70,4 @@ function chainOf(key, index) {
   };
 }
 
-module.exports = { NOEPIC, buildTree, isPlaceholder, chainOf, firstName, columnsOf };
+module.exports = { NOEPIC, buildTree, isPlaceholder, chainOf, firstName, columnsOf, tipOf };

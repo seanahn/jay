@@ -79,7 +79,7 @@ test('who, status and done values', () => {
   assert.strictEqual(e.who, 'Mia'); assert.strictEqual(e.status, 'In Progress'); assert.strictEqual(e.done, false);
   assert.strictEqual(t2.who, '-'); assert.strictEqual(t2.status, null); assert.strictEqual(t2.done, false);
   assert.strictEqual(t3.who, 'Bob'); assert.strictEqual(t3.status, 'Done'); assert.strictEqual(t3.done, true);
-  assert.deepStrictEqual(Object.keys(e).sort(), ['children', 'done', 'due', 'estimate', 'key', 'kind', 'labels', 'mine', 'priority', 'status', 'summary', 'type', 'who']);
+  assert.deepStrictEqual(Object.keys(e).sort(), ['assignee', 'children', 'done', 'due', 'estimate', 'key', 'kind', 'labels', 'mine', 'owner', 'priority', 'status', 'statusName', 'summary', 'type', 'who']);
 });
 
 test('ordering', () => {
@@ -144,4 +144,17 @@ test('member tasks without an epic go in a final "No epic" group, in mine and al
   assert.deepStrictEqual(keys(all.groups[1].nodes), ['DEMO-30', 'DEMO-31', 'DEMO-32']);
   const none = buildTree({ epics: [], children: new Map([[NOEPIC, [iss('DEMO-31', { assignee: bob })]]]), meId: ME, mode: 'mine', placeholders: [] });
   assert.deepStrictEqual(none.groups, [], 'nothing of mine without an epic: no group');
+});
+
+test('nodes carry assignee name, status name and owner (me / other / none; a placeholder is none)', () => {
+  const ghost = person('acc-tbd', 'TBD Team');
+  const epics = [iss('DEMO-1', { isEpic: true, assignee: me, status: { name: 'In Progress', category: 'indeterminate' } })];
+  const children = new Map([['DEMO-1', [iss('DEMO-2', { parentKey: 'DEMO-1', assignee: bob }), iss('DEMO-3', { parentKey: 'DEMO-1' }),
+    iss('DEMO-4', { parentKey: 'DEMO-1', assignee: ghost }), iss('DEMO-5', { parentKey: 'DEMO-1', assignee: person('acc-tbd2', 'Other Ghost') })]]]);
+  const { groups } = buildTree({ epics, children, meId: ME, mode: 'all', placeholders: ['TBD Team', 'acc-tbd2'] });
+  const [e] = groups.flatMap((g) => g.nodes); const [t2, t3, t4, t5] = e.children;
+  assert.deepStrictEqual([e.owner, e.assignee, e.statusName], ['me', 'Mia Demo', 'In Progress']);
+  assert.deepStrictEqual([t2.owner, t2.assignee], ['other', 'Bob Sample']);
+  assert.deepStrictEqual([t3.owner, t3.assignee, t3.statusName], ['none', null, 'To Do']);
+  assert.strictEqual(t4.owner, 'none'); assert.strictEqual(t5.owner, 'none');
 });

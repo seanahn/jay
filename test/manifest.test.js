@@ -12,7 +12,7 @@ test('manifest', () => {
   assert.strictEqual(props['jay.quarter.fiscalYearStart'].default, 1);
   assert.deepStrictEqual(props['jay.quarter.patterns'].default, ['label:FY{YYYY}Q{Q}', 'label:FY{YY}-Q{Q}', 'summary:[Q{Q}FY{YY}]']);
   assert.deepStrictEqual(props['jay.placeholderAssignees'].default, []);
-  assert.deepStrictEqual(props['jay.columns'].default, ['key', 'summary', 'assignee', 'status']);
+  assert.deepStrictEqual(props['jay.columns'].default, ['key', 'summary', 'status']);
   assert.deepStrictEqual(props['jay.columns'].items.enum, ['key', 'summary', 'assignee', 'status', 'type', 'priority', 'due', 'labels', 'estimate']);
   assert.strictEqual(props['jay.agentFiles'].default, true);
   // where the token goes and what runs: no workspace-capable scope, and not machine (remote windows ignore machine-scoped user values)

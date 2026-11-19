@@ -179,8 +179,7 @@ epic with an item of Sean's in it appears with every task and
 sub-task, and others' items show in grey.
 
 Each row shows the columns in `jay.columns` (Sean, 2026-11-19, during
-the live check). The default is `["key", "summary", "assignee",
-"status"]`. The other choices are `type`, `priority`, `due`, `labels`
+the live check). The default is `["key", "summary", "status"]`. The other choices are `type`, `priority`, `due`, `labels`
 and `estimate`, the original estimate as Jira formats it, for example
 `2d 4h`. The columns appear in the order listed. Unknown names are
 ignored, and `summary` is always shown.
@@ -192,9 +191,20 @@ ignored, and `summary` is always shown.
 - Status shows only when it isn't To Do *(builder's call)*.
 - **Width matters** (Sean, 2026-11-19, during the live check). Each tree
   level is indented 8 px. A ticket in the selected project shows only
-  its number in the key column (`16324`). The full key and title are in
-  the row's tooltip. Tickets from other projects (for example in Jira
-  results) keep their full key.
+  its number in the key column (`16324`). Tickets from other projects
+  (for example in Jira results) keep their full key.
+- **The tooltip** on every row (tree and Jira results) shows, one per
+  line: the full key and type, the full title, the assignee (or
+  "Unassigned"), the status, and then the priority, due date, original
+  estimate and labels when they're set (Sean, 2026-11-19).
+- **The key's color shows who has the ticket** (Sean, 2026-11-19):
+  - green (`charts.green`) when it's Sean's;
+  - blue (`charts.blue`) when it's someone else's;
+  - orange (`charts.orange`) when it's unassigned or assigned to a
+    placeholder account, which means it's up for grabs.
+
+  The default columns no longer include `assignee`. It's still
+  available in `jay.columns`.
 - Empty values show as `-`.
 
 Done items stay in the tree, struck through or faded *(builder's
@@ -711,7 +721,7 @@ cache, then refreshes it in full.
 | `jay.quarter.fiscalYearStart` | 1 | Fiscal year start month |
 | `jay.quarter.patterns` | the three templates above | How epics mark their quarter |
 | `jay.placeholderAssignees` | `[]` | Display names or account ids that count as unclaimed |
-| `jay.columns` | `["key","summary","assignee","status"]` | Tree and search-result columns, in order: key, summary, assignee, status, type, priority, due, labels, estimate |
+| `jay.columns` | `["key","summary","status"]` | Tree and search-result columns, in order: key, summary, assignee, status, type, priority, due, labels, estimate |
 | `jay.agentFiles` | true | Write `~/.jay/issues/*.jira` and `current.jira` |
 
 `jay.site`, `jay.signIn.tokenFile` and `jay.signIn.refreshCommand` are read only from your user settings (or the remote's settings in a remote window; no `machine` scope, which remote windows would ignore), so a repo's workspace settings can't send the token elsewhere or pick a command to run.

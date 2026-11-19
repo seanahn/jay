@@ -148,7 +148,7 @@
             "type": "string",
             "enum": ["key", "summary", "assignee", "status", "type", "priority", "due", "labels", "estimate"]
           },
-          "default": ["key", "summary", "assignee", "status"],
+          "default": ["key", "summary", "status"],
           "description": "The columns the sidebar shows on each row, in order. The summary is always shown."
         },
         "jay.agentFiles": {

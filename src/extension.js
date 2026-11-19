@@ -8,7 +8,7 @@ const { createHttp } = require('./http');
 const { createApi, FIELDS } = require('./api');
 const { createPeriods } = require('./periods');
 const { createLoader, viewKeyOf } = require('./loader');
-const { buildTree, firstName, columnsOf } = require('./tree');
+const { buildTree, firstName, columnsOf, tipOf } = require('./tree');
 const { createEvents } = require('./events');
 const { createMirror } = require('./mirror');
 const { createWriter } = require('./writes');
@@ -34,7 +34,7 @@ const PATTERNS = require('../package.json').contributes.configuration.properties
 const WRITES = ['saveText', 'addComment', 'editComment', 'setField', 'transition'];
 const SEARCH_MAX = 20;
 const COLUMN_NAMES = ['key', 'summary', 'assignee', 'status', 'type', 'priority', 'due', 'labels', 'estimate'];
-const DEFAULT_COLUMNS = ['key', 'summary', 'assignee', 'status'];
+const DEFAULT_COLUMNS = ['key', 'summary', 'status'];
 const SEARCH_FAILED = 'Jira search failed';
 const NOT_SIGNED_IN = { ok: false, kind: 'failed', message: 'Not signed in' };
 
@@ -453,7 +453,7 @@ function activate(context, deps = {}) {
       const [found, hit] = await Promise.all([api.search(jql, { fields: FIELDS, max: SEARCH_MAX }), byKey]);
       const all = hit ? [hit, ...found.filter((i) => i.key !== hit.key)] : found;
       const items = all.slice(0, SEARCH_MAX).map((i) => ({
-        key: i.key, summary: i.summary, who: firstName(i.assignee), ...columnsOf(i),
+        key: i.key, summary: i.summary, who: firstName(i.assignee), ...columnsOf(i), ...tipOf(i, me.accountId, cfg('placeholderAssignees', [])),
         status: i.status && i.status.category === 'new' ? null : (i.status && i.status.name) || null,
         mine: !!i.assignee && i.assignee.accountId === me.accountId,
       }));

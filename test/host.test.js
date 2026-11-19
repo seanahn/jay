@@ -581,9 +581,9 @@ test('sidebar search: exact JQL, 20-item cap, mapped items', async () => {
   assert.strictEqual(textCalls(h).length, 1, 'the cap stops paging');
   assert.strictEqual(r.id, 7); assert.strictEqual(r.query, 'wid"get\\x'); assert.strictEqual(r.items.length, 20);
   const rest = { type: 'Task', priority: null, due: null, labels: [], estimate: null };
-  assert.deepStrictEqual(r.items[0], { key: 'OTH-1', summary: 'Widget 1', who: 'Ann', status: null, mine: true, ...rest });
-  assert.deepStrictEqual(r.items[1], { key: 'OTH-2', summary: 'Widget 2', who: '-', status: null, mine: false, ...rest });
-  assert.deepStrictEqual(r.items[2], { key: 'OTH-3', summary: 'Widget 3', who: 'Bo', status: 'In Progress', mine: false, ...rest });
+  assert.deepStrictEqual(r.items[0], { key: 'OTH-1', summary: 'Widget 1', who: 'Ann', status: null, mine: true, assignee: 'Ann Example', statusName: 'To Do', owner: 'me', ...rest });
+  assert.deepStrictEqual(r.items[1], { key: 'OTH-2', summary: 'Widget 2', who: '-', status: null, mine: false, assignee: null, statusName: 'To Do', owner: 'none', ...rest });
+  assert.deepStrictEqual(r.items[2], { key: 'OTH-3', summary: 'Widget 3', who: 'Bo', status: 'In Progress', mine: false, assignee: 'Bo Sample', statusName: 'In Progress', owner: 'other', ...rest });
 });
 
 test('sidebar search: a key-like query is looked up on its own; a missing one is ignored, a real one comes first', async () => {
@@ -658,12 +658,12 @@ test('columns setting is validated and sent in the state; a change re-posts stat
   const h = start();
   await settle();
   const cols = () => lastState(h.view).columns;
-  assert.deepStrictEqual(cols(), ['key', 'summary', 'assignee', 'status'], 'default');
+  assert.deepStrictEqual(cols(), ['key', 'summary', 'status'], 'default');
   const set = (v) => { const n = h.view.webview.posted.length; ui.setConfig('jay.columns', v); assert.ok(h.view.webview.posted.length > n, 'state re-posted'); return cols(); };
   assert.deepStrictEqual(set(['key', 'bogus', 'estimate', 'due', 'estimate', 'key']), ['key', 'summary', 'estimate', 'due'], 'unknown and duplicates dropped, summary forced after key');
   assert.deepStrictEqual(set(['priority', 'type']), ['summary', 'priority', 'type'], 'summary first when no key');
   assert.deepStrictEqual(set(['labels', 'key']), ['labels', 'key', 'summary']);
-  assert.deepStrictEqual(set('key'), ['key', 'summary', 'assignee', 'status'], 'non-array falls back');
+  assert.deepStrictEqual(set('key'), ['key', 'summary', 'status'], 'non-array falls back');
   assert.deepStrictEqual(set([]), ['summary'], 'empty array still shows summary');
 });
 
@@ -1082,4 +1082,14 @@ test('a tab restored before sign-in says it is waiting, then loads once the sess
   who.release(); await settle();
   assert.strictEqual(types().filter((t) => t === 'render').length, 1, 'rendered once signed in');
   assert.ok(fs.existsSync(path.join(h.jayDir, 'issues', 'DEMO-1.jira')));
+});
+
+test('sidebar search: an assignee listed in jay.placeholderAssignees has owner none', async () => {
+  const h = start({ world: { search: (body, ok) => ok({ issues: [raw('OTH-1', { summary: 'W', assignee: OTHER })] }) } });
+  await settle();
+  ui.setConfig('jay.placeholderAssignees', ['Bo Sample']);
+  h.view.webview._receive({ type: 'search', id: 1, query: 'widget' });
+  await settle();
+  const [r] = searchReplies(h.view);
+  assert.strictEqual(r.items[0].owner, 'none'); assert.strictEqual(r.items[0].assignee, 'Bo Sample');
 });
