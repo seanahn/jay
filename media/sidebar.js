@@ -122,7 +122,7 @@
   const orDash = (v) => (v === undefined || v === null || v === '' ? '-' : String(v));
   function cellText(n, c) {
     switch (c) {
-      case 'key': return orDash(n.key);
+      case 'key': return state.project && n.key.startsWith(state.project + '-') ? n.key.slice(state.project.length + 1) : orDash(n.key);
       case 'summary': return orDash(n.summary);
       case 'assignee': return n.mine ? 'me' : orDash(n.who);
       case 'status': return n.status && n.status !== 'To Do' ? n.status : '';   // To Do stays empty
@@ -143,7 +143,7 @@
     if (ev.bold) row.classList.add('bold');
     if (ev.mention) row.classList.add('pulse');
     if (ev.newEpic) row.classList.add('new');
-    row.dataset.key = n.key; row.setAttribute('role', 'treeitem');
+    row.dataset.key = n.key; row.setAttribute('role', 'treeitem'); row.setAttribute('title', n.key + ' ' + (n.summary || ''));
     const twisty = el('span', 'twisty', ''); twisty.dataset.toggle = n.key;
     row.append(twisty);
     for (const c of columnList()) row.append(el('span', 'col-' + c + (c === 'assignee' && n.mine ? ' me' : ''), cellText(n, c)));

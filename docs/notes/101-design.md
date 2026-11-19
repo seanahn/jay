@@ -190,6 +190,11 @@ ignored, and `summary` is always shown.
   A ticket assigned to Sean shows `me`, in green (the theme's
   `charts.green`), in the tree and in the Jira results (Sean, 2026-11-19).
 - Status shows only when it isn't To Do *(builder's call)*.
+- **Width matters** (Sean, 2026-11-19, during the live check). Each tree
+  level is indented 8 px. A ticket in the selected project shows only
+  its number in the key column (`16324`). The full key and title are in
+  the row's tooltip. Tickets from other projects (for example in Jira
+  results) keep their full key.
 - Empty values show as `-`.
 
 Done items stay in the tree, struck through or faded *(builder's

@@ -261,7 +261,7 @@ test('columns: one span per column in the given order, "-" for empties, textCont
   const row = p.d.querySelector('.row[data-key="DEMO-2"]');
   const cells = [...row.children].filter((c) => /^col-/.test(c.className));
   assert.deepStrictEqual(cells.map((c) => c.className), ['col-estimate', 'col-key', 'col-summary', 'col-due', 'col-labels', 'col-priority', 'col-status', 'col-assignee me', 'col-type']);
-  assert.deepStrictEqual(cells.map((c) => c.textContent), ['-', 'DEMO-2', '<b>x</b>', '2027-03-31', 'a, b', '-', '', 'me', 'Task']);
+  assert.deepStrictEqual(cells.map((c) => c.textContent), ['-', '2', '<b>x</b>', '2027-03-31', 'a, b', '-', '', 'me', 'Task']);
   assert.strictEqual(row.querySelector('b'), null);
   assert.ok(row.classList.contains('mine'));
 });
@@ -453,4 +453,33 @@ test("assignee cell: 'me' in green when mine, first name otherwise, '-' when una
 
 test('the CSS paints .col-assignee.me with --vscode-charts-green', () => {
   assert.ok(/\.col-assignee\.me\s*\{[^}]*var\(--vscode-charts-green\)/.test(CSS));
+});
+
+test('key cell shows only the number in the selected project, the full key elsewhere', () => {
+  const p = page(); p.send(state());
+  search(p, 'widget'); p.advance(400);
+  results(p, 1, [node('OTH-77', 'Elsewhere'), node('DEMO-90', 'Same project')]);
+  assert.strictEqual(p.d.querySelector('.row[data-key="DEMO-2"] .col-key').textContent, '2');
+  const j = jiraRows(p);
+  assert.strictEqual(j.find((r) => r.dataset.key === 'OTH-77').querySelector('.col-key').textContent, 'OTH-77');
+  assert.strictEqual(j.find((r) => r.dataset.key === 'DEMO-90').querySelector('.col-key').textContent, '90');
+});
+
+test('every row has a tooltip with the full key and summary', () => {
+  const p = page(); p.send(state());
+  assert.strictEqual(p.d.querySelector('.row[data-key="DEMO-2"]').getAttribute('title'), 'DEMO-2 Build the widget');
+  search(p, 'widget'); p.advance(400);
+  results(p, 1, [node('OTH-77', 'Elsewhere')]);
+  assert.strictEqual(jiraRows(p)[0].getAttribute('title'), 'OTH-77 Elsewhere');
+});
+
+test('clicking a row with a short key still posts the full key', () => {
+  const p = page(); p.send(state());
+  p.d.querySelector('.row[data-key="DEMO-2"] .col-summary').dispatchEvent(new p.w.MouseEvent('click', { bubbles: true }));
+  assert.deepStrictEqual(p.posted.filter((m) => m.type === 'open'), [{ type: 'open', key: 'DEMO-2' }]);
+});
+
+test('the CSS indents 8px per tree level', () => {
+  assert.ok(/\.row\.depth1\s*\{[^}]*padding-left:\s*8px/.test(CSS));
+  assert.ok(/\.row\.depth2\s*\{[^}]*padding-left:\s*16px/.test(CSS));
 });
