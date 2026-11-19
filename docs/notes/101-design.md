@@ -187,6 +187,8 @@ ignored, and `summary` is always shown.
 
 - In the sidebar, the assignee shows as a first name, or `-` when
   unassigned (Sean).
+  A ticket assigned to Sean shows `me`, in green (the theme's
+  `charts.green`), in the tree and in the Jira results (Sean, 2026-11-19).
 - Status shows only when it isn't To Do *(builder's call)*.
 - Empty values show as `-`.
 

@@ -20,6 +20,7 @@ button.signin { margin: 8px; }
 .row.depth2 { padding-left: 32px; }
 .row .twisty { display: inline-block; width: 12px; flex: none; }
 .row [class^="col-"] { flex: none; font-size: 11px; white-space: nowrap; color: var(--vscode-descriptionForeground); }
+.row .col-assignee.me { color: var(--vscode-charts-green); }
 .row .col-key { color: inherit; }
 .row .col-summary { flex: 1 1 0; min-width: 0; font-size: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; }
 .row.mine { color: var(--vscode-foreground); }

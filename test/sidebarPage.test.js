@@ -41,7 +41,10 @@ test('state renders groups with mine and other classes', () => {
   assert.ok(by('DEMO-3').classList.contains('mine'));
   assert.ok(by('DEMO-2').classList.contains('other'));
   assert.ok(by('DEMO-4').classList.contains('done'));
-  assert.strictEqual(by('DEMO-3').querySelector('.col-assignee').textContent, 'Ann');
+  assert.strictEqual(by('DEMO-3').querySelector('.col-assignee').textContent, 'me');
+  assert.ok(by('DEMO-3').querySelector('.col-assignee').classList.contains('me'));
+  assert.strictEqual(by('DEMO-2').querySelector('.col-assignee').textContent, 'Ann');
+  assert.ok(!by('DEMO-2').querySelector('.col-assignee').classList.contains('me'));
   assert.strictEqual(by('DEMO-2').querySelector('.col-status').textContent, '', 'To Do shows no status');
   assert.strictEqual(by('DEMO-4').querySelector('.col-status').textContent, 'Done');
   assert.strictEqual(by('DEMO-3').querySelector('.col-summary').textContent, 'Wire the flange');
@@ -218,7 +221,7 @@ test('results show under a heading as flat rows, text only, minus keys already i
   assert.strictEqual(p.d.querySelector('.tree img'), null);
   assert.strictEqual(p.d.querySelector('.tree b'), null);
   assert.ok(rs[0].classList.contains('mine') && rs[1].classList.contains('other'));
-  assert.strictEqual(rs[0].querySelector('.col-assignee').textContent, 'Bo');
+  assert.strictEqual(rs[0].querySelector('.col-assignee').textContent, 'me');
   assert.strictEqual(rs[0].querySelector('.col-status').textContent, 'In Progress');
   assert.strictEqual(rs[1].querySelector('.col-assignee').textContent, '-');
   assert.strictEqual(rs[1].querySelector('.col-status').textContent, '', 'no status: the cell stays empty');
@@ -257,8 +260,8 @@ test('columns: one span per column in the given order, "-" for empties, textCont
   p.send(state({ mode: 'all', columns: ['estimate', 'key', 'summary', 'due', 'labels', 'priority', 'status', 'assignee', 'type'], groups: [{ id: 'g', title: 'T', nodes: [n] }] }));
   const row = p.d.querySelector('.row[data-key="DEMO-2"]');
   const cells = [...row.children].filter((c) => /^col-/.test(c.className));
-  assert.deepStrictEqual(cells.map((c) => c.className), ['col-estimate', 'col-key', 'col-summary', 'col-due', 'col-labels', 'col-priority', 'col-status', 'col-assignee', 'col-type']);
-  assert.deepStrictEqual(cells.map((c) => c.textContent), ['-', 'DEMO-2', '<b>x</b>', '2027-03-31', 'a, b', '-', '', '-', 'Task']);
+  assert.deepStrictEqual(cells.map((c) => c.className), ['col-estimate', 'col-key', 'col-summary', 'col-due', 'col-labels', 'col-priority', 'col-status', 'col-assignee me', 'col-type']);
+  assert.deepStrictEqual(cells.map((c) => c.textContent), ['-', 'DEMO-2', '<b>x</b>', '2027-03-31', 'a, b', '-', '', 'me', 'Task']);
   assert.strictEqual(row.querySelector('b'), null);
   assert.ok(row.classList.contains('mine'));
 });
@@ -432,4 +435,22 @@ test('picker: Recent goes away once text is typed; recent is not repeated under 
   assert.deepStrictEqual(opts(p).filter((k) => k === 'GAMMA').length, 1);
   typeIn(p, 'a');
   assert.deepStrictEqual(heads(), []);
+});
+
+test("assignee cell: 'me' in green when mine, first name otherwise, '-' when unassigned (tree and search rows)", () => {
+  const p = page(); p.send(state({ groups: [{ id: 'g', title: null, nodes: [
+    node('DEMO-7', 'Mine one', { mine: true, who: 'Cy' }), node('DEMO-8', 'Nobody', { who: null })] }] }));
+  const cell = (k) => p.d.querySelector(`.row[data-key="${k}"] .col-assignee`);
+  assert.strictEqual(cell('DEMO-7').textContent, 'me'); assert.ok(cell('DEMO-7').classList.contains('me'));
+  assert.strictEqual(cell('DEMO-8').textContent, '-'); assert.ok(!cell('DEMO-8').classList.contains('me'));
+  search(p, 'widget'); p.advance(400);
+  results(p, 1, [item('DEMO-20', 'Mine hit', { mine: true }), item('DEMO-21', 'Other hit'), item('DEMO-22', 'Nobody hit', { who: null })]);
+  const [a, b, c] = jiraRows(p).map((r) => r.querySelector('.col-assignee'));
+  assert.strictEqual(a.textContent, 'me'); assert.ok(a.classList.contains('me'));
+  assert.strictEqual(b.textContent, 'Bo'); assert.ok(!b.classList.contains('me'));
+  assert.strictEqual(c.textContent, '-');
+});
+
+test('the CSS paints .col-assignee.me with --vscode-charts-green', () => {
+  assert.ok(/\.col-assignee\.me\s*\{[^}]*var\(--vscode-charts-green\)/.test(CSS));
 });

@@ -124,7 +124,7 @@
     switch (c) {
       case 'key': return orDash(n.key);
       case 'summary': return orDash(n.summary);
-      case 'assignee': return orDash(n.who);
+      case 'assignee': return n.mine ? 'me' : orDash(n.who);
       case 'status': return n.status && n.status !== 'To Do' ? n.status : '';   // To Do stays empty
       case 'type': return orDash(n.type);
       case 'priority': return orDash(n.priority);
@@ -146,7 +146,7 @@
     row.dataset.key = n.key; row.setAttribute('role', 'treeitem');
     const twisty = el('span', 'twisty', ''); twisty.dataset.toggle = n.key;
     row.append(twisty);
-    for (const c of columnList()) row.append(el('span', 'col-' + c, cellText(n, c)));
+    for (const c of columnList()) row.append(el('span', 'col-' + c + (c === 'assignee' && n.mine ? ' me' : ''), cellText(n, c)));
     if (ev.newEpic) row.append(el('span', 'newmark', 'new'));
     return row;
   }
