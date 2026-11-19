@@ -1,0 +1,8 @@
+{
+  "total": 3,
+  "comments": [
+    { "id": "303", "author": { "accountId": "acc-sam", "displayName": "Sam Lee" }, "created": "2026-01-09T10:00:00.000+0000", "updated": "2026-01-09T10:00:00.000+0000", "body": { "type": "doc", "version": 1, "content": [] } },
+    { "id": "302", "author": { "accountId": "acc-alex", "displayName": "Alex Kim" }, "created": "2026-01-08T10:00:00.000+0000", "updated": "2026-01-08T11:00:00.000+0000", "body": { "type": "doc", "version": 1, "content": [] } },
+    { "id": "301", "author": { "accountId": "acc-sam", "displayName": "Sam Lee" }, "created": "2026-01-07T10:00:00.000+0000", "updated": "2026-01-07T10:00:00.000+0000", "body": { "type": "doc", "version": 1, "content": [] } }
+  ]
+}

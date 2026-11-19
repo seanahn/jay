@@ -1,0 +1,131 @@
+{
+  "type": "doc",
+  "version": 1,
+  "content": [
+    { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Plan" }] },
+    {
+      "type": "paragraph",
+      "attrs": { "localId": "p-1" },
+      "content": [
+        { "type": "text", "text": "Hello " },
+        { "type": "text", "text": "bold", "marks": [{ "type": "strong" }] },
+        { "type": "text", "text": " " },
+        { "type": "text", "text": "slanted", "marks": [{ "type": "em" }] },
+        { "type": "text", "text": " " },
+        { "type": "text", "text": "mono", "marks": [{ "type": "code" }] },
+        { "type": "text", "text": " " },
+        { "type": "text", "text": "gone", "marks": [{ "type": "strike" }] },
+        { "type": "text", "text": " " },
+        { "type": "text", "text": "under", "marks": [{ "type": "underline" }, { "type": "strong" }] },
+        { "type": "text", "text": " " },
+        { "type": "text", "text": "red", "marks": [{ "type": "textColor", "attrs": { "color": "#ff0000" } }] }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "See " },
+        { "type": "text", "text": "the docs", "marks": [{ "type": "link", "attrs": { "href": "https://example.atlassian.net/wiki/docs" } }] },
+        { "type": "text", "text": "." }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "Ping " },
+        { "type": "mention", "attrs": { "id": "acc-alex", "text": "@Alex Kim", "accessLevel": "" } },
+        { "type": "text", "text": " and " },
+        { "type": "mention", "attrs": { "id": "acc-sam", "text": "Sam Lee" } },
+        { "type": "text", "text": " and " },
+        { "type": "mention", "attrs": { "id": "acc-alex", "text": "@Alex Kim", "accessLevel": "" } }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "Ship " },
+        { "type": "emoji", "attrs": { "shortName": ":rocket:", "id": "1f680", "text": "🚀" } },
+        { "type": "text", "text": " on " },
+        { "type": "date", "attrs": { "timestamp": "1795131000000" } },
+        { "type": "text", "text": " now " },
+        { "type": "status", "attrs": { "text": "IN REVIEW", "color": "blue", "localId": "st-1" } },
+        { "type": "hardBreak" },
+        { "type": "text", "text": "next line " },
+        { "type": "inlineCard", "attrs": { "url": "https://example.atlassian.net/browse/DEMO-2" } }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "one" }] }] },
+        {
+          "type": "listItem",
+          "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": "two" }] },
+            {
+              "type": "orderedList",
+              "attrs": { "order": 1 },
+              "content": [
+                { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "a" }] }] },
+                { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "b" }] }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "attrs": { "order": 3 },
+      "content": [
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "third" }] }] },
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "fourth" }] }] }
+      ]
+    },
+    {
+      "type": "taskList",
+      "attrs": { "localId": "tl-1" },
+      "content": [
+        { "type": "taskItem", "attrs": { "localId": "ti-1", "state": "TODO" }, "content": [{ "type": "text", "text": "write tests" }] },
+        { "type": "taskItem", "attrs": { "localId": "ti-2", "state": "DONE" }, "content": [{ "type": "text", "text": "ship it" }] }
+      ]
+    },
+    { "type": "codeBlock", "attrs": { "language": "js" }, "content": [{ "type": "text", "text": "const a = 1;\nreturn a;" }] },
+    { "type": "blockquote", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Quoted wisdom" }] }] },
+    { "type": "rule" },
+    {
+      "type": "table",
+      "attrs": { "isNumberColumnEnabled": false, "layout": "default" },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            { "type": "tableHeader", "attrs": {}, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Name" }] }] },
+            { "type": "tableHeader", "attrs": {}, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Role" }] }] }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            { "type": "tableCell", "attrs": {}, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Alex Kim" }] }] },
+            { "type": "tableCell", "attrs": {}, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Owner" }] }] }
+          ]
+        }
+      ]
+    },
+    { "type": "panel", "attrs": { "panelType": "info" }, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Heads up" }] }] },
+    { "type": "expand", "attrs": { "title": "More details" }, "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Hidden text" }] }] },
+    {
+      "type": "mediaSingle",
+      "attrs": { "layout": "center" },
+      "content": [{ "type": "media", "attrs": { "id": "media-1", "type": "file", "collection": "demo-collection", "width": 640, "height": 480 } }]
+    },
+    { "type": "extension", "attrs": { "extensionType": "com.example.macro", "extensionKey": "demo", "parameters": {} } },
+    {
+      "type": "futureNode",
+      "attrs": { "flavor": "new", "localId": "fn-1" },
+      "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Inside the future" }] }]
+    },
+    { "type": "paragraph", "attrs": {}, "content": [{ "type": "text", "text": "Tail" }] }
+  ]
+}

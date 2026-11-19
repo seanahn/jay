@@ -1,0 +1,188 @@
+{
+  "name": "jay",
+  "displayName": "jay",
+  "description": "Jira in a sidebar of its own: your epics and tickets by quarter, each ticket an editor tab, with its text available to the AI agent beside it. Not affiliated with Atlassian.",
+  "version": "0.1.1",
+  "publisher": "seanahn",
+  "license": "MIT",
+  "icon": "media/listing-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seanahn/jay"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onWebviewPanel:jay.ticket"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "jay",
+          "title": "Jira",
+          "icon": "media/jay-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "jay": [
+        {
+          "type": "webview",
+          "id": "jay.sidebar",
+          "name": "Jira"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "jay.refresh",
+        "title": "jay: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "jay.signIn",
+        "title": "jay: Sign In",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "jay.signOut",
+        "title": "jay: Sign Out",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "jay.focusSearch",
+        "title": "jay: Search Tickets"
+      },
+      {
+        "command": "jay.activeIssueFile",
+        "title": "jay: Active Issue File"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "jay.activeIssueFile",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "jay.refresh",
+          "when": "view == jay.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "jay.signIn",
+          "when": "view == jay.sidebar",
+          "group": "2_account@1"
+        },
+        {
+          "command": "jay.signOut",
+          "when": "view == jay.sidebar",
+          "group": "2_account@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "jay",
+      "properties": {
+        "jay.site": {
+          "type": "string",
+          "default": "",
+          "description": "Your Jira Cloud site URL, for example https://example.atlassian.net. Used when you sign in with an API token."
+        },
+        "jay.signIn.tokenFile": {
+          "type": "string",
+          "default": "",
+          "description": "A token file another tool keeps: either an OAuth credentials JSON file, or a jira-mcp wrapper or env file with JIRA_URL, JIRA_USERNAME and JIRA_API_TOKEN lines (never run). When set, jay uses that login instead of signing in itself, and never writes the file."
+        },
+        "jay.signIn.refreshCommand": {
+          "type": "string",
+          "default": "",
+          "description": "A command that refreshes the token file. jay runs it when the token has expired."
+        },
+        "jay.period": {
+          "type": "string",
+          "enum": ["quarter", "sprint", "fixVersion"],
+          "enumDescriptions": ["Quarters, matched on epics by the quarter patterns", "The project's sprints (Jira Software)", "The project's fix versions"],
+          "default": "quarter",
+          "description": "What the sidebar's second picker lists: quarters, sprints or fix versions."
+        },
+        "jay.quarter.fiscalYearStart": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "default": 1,
+          "description": "The month the fiscal year starts, 1 to 12. The default, 1, is the calendar year."
+        },
+        "jay.quarter.patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "label:FY{YYYY}Q{Q}",
+            "label:FY{YY}-Q{Q}",
+            "summary:[Q{Q}FY{YY}]"
+          ],
+          "description": "Templates that mark an epic as in a quarter. 'label:' templates match a label exactly; 'summary:' templates match part of the title. Use {YYYY}, {YY} and {Q}."
+        },
+        "jay.placeholderAssignees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Display names or account ids that count as unclaimed, so their tickets show under Unclaimed."
+        },
+        "jay.columns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["key", "summary", "assignee", "status", "type", "priority", "due", "labels", "estimate"]
+          },
+          "default": ["key", "summary", "assignee", "status"],
+          "description": "The columns the sidebar shows on each row, in order. The summary is always shown."
+        },
+        "jay.agentFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write each open ticket to ~/.jay as plain text (files readable only by you), so an AI agent beside jay knows which ticket is open. Off: no files, and jay.activeIssueFile returns nothing."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "for f in src/*.js media/*.js test/*.js; do [ -e \"$f\" ] || continue; node --check \"$f\" || exit 1; done",
+    "test": "node --test --test-force-exit --test-timeout=20000 test/*.test.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "jsdom": "^25.0.0",
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-dropcursor": "1.8.4",
+    "prosemirror-gapcursor": "1.4.1",
+    "prosemirror-history": "1.5.2",
+    "prosemirror-inputrules": "1.7.0",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.13",
+    "prosemirror-schema-list": "1.6.1",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-transform": "1.12.7",
+    "prosemirror-view": "1.43.0"
+  },
+  "keywords": [
+    "jira",
+    "atlassian",
+    "agent",
+    "claude",
+    "issues"
+  ]
+}
