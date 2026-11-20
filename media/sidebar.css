@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 body { padding: 0; margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-sideBar-foreground, var(--vscode-foreground)); }
 .account { margin: 6px 8px 2px; font-size: 11px; color: var(--vscode-descriptionForeground); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .account .mode-current { font-weight: 700; color: var(--vscode-foreground); }

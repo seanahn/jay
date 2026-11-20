@@ -1543,11 +1543,10 @@ test('the tree: setSpace loads it and remembers the space; expandPage loads chil
   assert.deepStrictEqual(h.gs.get('jay.recentSpaces'), ['DEMO']);
   let conf = lastState(h.view).conf;
   assert.deepStrictEqual(conf.space, { key: 'DEMO', name: 'Demo Space' });
-  assert.deepStrictEqual(conf.roots, ['1001']);
-  assert.deepStrictEqual(conf.items['1001'], { id: '1001', kind: 'page', title: 'Demo Home', parentId: null, children: [], childrenLoaded: false, hasMore: false });
-  r({ type: 'expandPage', id: '1001' }); await settle();
-  conf = lastState(h.view).conf;
-  assert.deepStrictEqual(conf.items['1001'].children, ['1101', '1102']);
+  // the space's home page is "Overview", and its children are the top level, as in Confluence's own sidebar
+  assert.deepStrictEqual(conf.roots, ['1001', '1101', '1102']);
+  assert.deepStrictEqual(conf.items['1001'], { id: '1001', kind: 'page', title: 'Overview', parentId: null, children: [], childrenLoaded: true, hasMore: false });
+  assert.strictEqual(conf.items['1101'].title, 'Child A');
   assert.strictEqual(conf.items['1102'].kind, 'whiteboard');
   const cache = path.join(h.jayDir, 'cache', 'confluence-2001.json');
   assert.strictEqual(JSON.parse(fs.readFileSync(cache, 'utf8')).owner, ME.accountId);
@@ -1571,7 +1570,26 @@ test('the tree: setSpace loads it and remembers the space; expandPage loads chil
   await h.gs.update('jay.signedOut', undefined);
   const again = start({ confluence: true, gs: h.gs, home: h.home });
   await settle();
-  assert.deepStrictEqual(lastState(again.view).conf.roots, ['1001']);
+  assert.deepStrictEqual(lastState(again.view).conf.roots, ['1001'], 'a home page with no children: Overview alone');
+});
+
+test('the tree: a space whose top level is more than its home page keeps the other top-level pages after the home page\'s children', async () => {
+  const h = start({ confluence: true, world: { rootPages: [{ id: '1001', title: 'Demo Home' }, { id: '1002', title: 'Loose page' }], childPages: { 1001: [{ id: '1101', type: 'page', title: 'Child A' }] } } });
+  await settle();
+  h.view.webview._receive({ type: 'setSpace', key: 'DEMO' }); await settle();
+  const conf = lastState(h.view).conf;
+  assert.deepStrictEqual(conf.roots, ['1001', '1101', '1002']);
+  assert.strictEqual(conf.items['1002'].title, 'Loose page');
+  assert.strictEqual(conf.rootsHasMore, false);
+});
+
+test('the tree: a space with no home page among its top level shows the top level as it is', async () => {
+  const h = start({ confluence: true, world: { spaces: [{ ...DEMO_SPACE, homepageId: null }] } });
+  await settle();
+  h.view.webview._receive({ type: 'setSpace', key: 'DEMO' }); await settle();
+  const conf = lastState(h.view).conf;
+  assert.deepStrictEqual(conf.roots, ['1001']);
+  assert.strictEqual(conf.items['1001'].title, 'Demo Home');
 });
 
 test('My pages: opening the section polls the pages I created; More pages through; the choice is remembered', async () => {

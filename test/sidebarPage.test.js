@@ -810,3 +810,11 @@ test('signed out on the Confluence side shows Sign In and no Confluence controls
   assert.ok(p.d.querySelector('.conf-controls').hidden);
   assert.strictEqual(ctree(p).querySelector('.row'), null);
 });
+
+// jsdom's style engine ignores !important here, so the cascade is checked on the CSS itself: a browser honors it (ticket.css relies on the same rule)
+test('the CSS hides [hidden] over any display rule, so the Confluence side shows no Jira controls', () => {
+  assert.match(CSS, /^\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/m);
+  const p = page(); p.send(cstate());
+  assert.strictEqual(p.d.querySelector('.controls:not(.conf-controls)').hidden, true, 'the Jira search, project and period are hidden on the Confluence side');
+  assert.strictEqual(p.d.querySelector('.conf-controls').hidden, false);
+});

@@ -200,13 +200,24 @@ function createConfluenceSide(o) {
       const owner = s.trusted;
       const tree = await pageTree.load(sp.id, owner, c.tree);
       if (!current()) return;
+      // the home page's children are the top level, as in Confluence's own sidebar (see homeOf)
+      const home = homeOf(sp, tree);
+      if (home && !home.childrenLoaded) { await pageTree.expand(tree, home.id); if (!current()) return; }
       c.tree = tree; pageTree.save(tree, owner);
     } catch (e) { if (live(c, g)) handle(c, e); } finally { if (current()) { c.loading.tree = false; o.render(); } }
+  }
+
+  /** The space's home page when it is on the tree's top level: shown as "Overview", its children shown as the top level. */
+  function homeOf(space, tree) {
+    const id = space && space.homepageId ? String(space.homepageId) : null;
+    return id && tree && tree.roots.includes(id) ? tree.items.get(id) || null : null;
   }
 
   /** expand or more on the tree on screen, one at a time per item; saved and shown when it is still that tree. */
   async function treeStep(c, op, id) {
     const tree = c.tree; const g = gen;
+    // "more" at the top level reads the home page's next children first, then the space's next top-level pages
+    if (op === 'more' && (id === null || id === undefined)) { const home = homeOf(c.space, tree); if (home && home.next) id = home.id; }
     const k = op + ':' + id;
     if (!tree || c.busy.has(k)) return;
     c.busy.add(k);
@@ -308,6 +319,12 @@ function createConfluenceSide(o) {
     const t = c && c.tree && (!c.space || c.tree.spaceId === c.space.id) ? c.tree : null;
     const items = {};
     if (t) for (const i of t.items.values()) items[i.id] = { id: i.id, kind: i.kind, title: i.title, parentId: i.parentId, children: i.children, childrenLoaded: i.childrenLoaded, hasMore: !!i.next };
+    const home = t && c ? homeOf(c.space, t) : null;
+    let roots = t ? t.roots : [];
+    if (home && home.childrenLoaded) {
+      items[home.id] = { ...items[home.id], title: 'Overview', children: [], childrenLoaded: true, hasMore: false };
+      roots = [home.id, ...home.children, ...roots.filter((k) => k !== home.id)];
+    }
     return {
       side: side(), confluenceEnabled: enabled(),
       conf: {
@@ -315,7 +332,7 @@ function createConfluenceSide(o) {
         spaces: c ? c.spaces.map((x) => ({ key: x.key, name: x.name, type: x.type })) : [],
         space: c && c.space ? { key: c.space.key, name: c.space.name } : stored ? { key: stored, name: null } : null,
         recentSpaces: recentSpaces(),
-        roots: t ? t.roots : [], rootsHasMore: !!(t && t.rootsNext), items,
+        roots, rootsHasMore: !!(t && (t.rootsNext || (home && home.next))), items,
         mentions: c && s.events ? c.mentions.list() : [],
         mine: c && c.mine ? { items: c.mine.items.map((x) => ({ id: x.id, title: x.title, spaceKey: x.spaceKey })), hasMore: c.mine.items.length < c.mine.total } : { items: [], hasMore: false },
         open: open(),

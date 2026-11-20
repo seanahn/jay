@@ -443,6 +443,15 @@ Questions that came up while building, and how they were settled:
 - **Links in Sean's own messages in perch:** perch showed them as plain
   text, so perch 0.7.35 covered Claude's replies only. Sean confirmed the
   design's line, and perch 0.7.36 links them too.
+- **The space's home page is "Overview"** (0.2.1). When the home page is
+  on the tree's top level, it shows first as "Overview" and its children
+  are the top level, as in Confluence's own sidebar; other top-level pages
+  follow them. The tree no longer shows the space name twice.
+- **The Confluence side hid Jira's controls only in tests** (fixed in
+  0.2.1): `.controls { display: flex }` overrode the browser's `[hidden]`
+  rule, so the key search, project and period boxes showed on the
+  Confluence side. `sidebar.css` now starts with `[hidden] { display:
+  none !important; }`, as `ticket.css` does.
 - **Pages whose status isn't `current` are read-only**, with "Edit in
   Confluence" and no comment box. A save sends `current` and could
   un-archive the page. A missing status counts as current.
