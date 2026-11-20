@@ -2,7 +2,7 @@
   "name": "jay",
   "displayName": "jay",
   "description": "Jira in a sidebar of its own: your epics and tickets by quarter, each ticket an editor tab, with its text available to the AI agent beside it. Not affiliated with Atlassian.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "seanahn",
   "license": "MIT",
   "icon": "media/listing-icon.png",
