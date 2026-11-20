@@ -161,14 +161,12 @@ already open focuses its tab.
 
 ## Links into jay
 
-- **In perch (Claude's replies):** a Confluence URL on the jay site
-  already shows as a link. perch makes a plain click open it through jay
-  (`jay.openPage(url)`). Ctrl/Cmd-click still opens the browser. Without
-  jay, links behave as today (Sean). As built, only links in Claude's
-  replies open through jay; a URL in Sean's own message is plain text in
-  perch, and making it a link is a separate perch change *(ruling during
-  the build, pending Sean's confirmation: the design had attributed
-  "and Sean's messages" to Sean)*.
+- **In perch (Claude's replies and Sean's messages):** a Confluence URL
+  on the jay site shows as a link. perch makes a plain click open it
+  through jay (`jay.openPage(url)`). Ctrl/Cmd-click still opens the
+  browser. Without jay, links behave as today (Sean). perch 0.7.35 did
+  this for Claude's replies; 0.7.36 made the web addresses in Sean's own
+  messages links too (Sean).
 - **In Jira tickets:**
   - The ticket tab lists the Confluence pages the ticket references
     under "Confluence pages": links in its description and comments,
@@ -442,9 +440,9 @@ Questions that came up while building, and how they were settled:
 - **Tree and My pages tooltips show path and space only.** The listing
   has no author or date, and a request per row is too dear. Mention rows
   do show who mentioned Sean and when.
-- **Only links in Claude's replies open through jay** *(pending Sean's
-  confirmation)*. perch shows Sean's own messages as plain text, and
-  making them links is a separate perch change.
+- **Links in Sean's own messages in perch:** perch showed them as plain
+  text, so perch 0.7.35 covered Claude's replies only. Sean confirmed the
+  design's line, and perch 0.7.36 links them too.
 - **Pages whose status isn't `current` are read-only**, with "Edit in
   Confluence" and no comment box. A save sends `current` and could
   un-archive the page. A missing status counts as current.
