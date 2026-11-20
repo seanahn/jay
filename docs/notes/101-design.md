@@ -195,7 +195,7 @@ ignored, and `summary` is always shown.
   (for example in Jira results) keep their full key.
 - **Shared title labels are stripped** (Sean, 2026-11-20). When a
   parent's title starts with a label ending in a colon (for example
-  `C3 Code Self-Serve:`), a child whose title starts with the same label
+  `Acme Portal:`), a child whose title starts with the same label
   shows only the rest. The comparison ignores case and the spaces after
   the colon. This applies only to tree rows. The tooltip, the ticket tab
   and the agent file keep the full title.
