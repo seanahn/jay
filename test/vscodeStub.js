@@ -25,8 +25,11 @@ function install() {
   // the editor's Microsoft provider: ui.session(scopes, options) answers getSession; calls are recorded
   ui.session = () => undefined;
   const windowState = new Emitter();
-  const tabChange = new Emitter();
-  const tabGroups = { activeTabGroup: { activeTab: null }, onDidChangeTabs: tabChange.event };
+  const tabChange = new Emitter(); const groupChange = new Emitter();
+  // one editor group by default; ui.openTab / ui.closeTab / ui.setActiveTab change it and fire onDidChangeTabs
+  const group0 = { viewColumn: 1, isActive: true, tabs: [], activeTab: null };
+  const tabGroups = { all: [group0], activeTabGroup: group0, onDidChangeTabs: tabChange.event, onDidChangeTabGroups: groupChange.event };
+  ui.extensions = {};   // id -> extension object, for vscode.extensions.getExtension
   const Uri = {
     file: (p) => ({ fsPath: p, path: p, scheme: 'file', toString: () => 'file://' + p }),
     joinPath: (u, ...parts) => Uri.file(require('path').join(u.fsPath, ...parts)),
@@ -48,6 +51,8 @@ function install() {
     Uri, EventEmitter: Emitter,
     RelativePattern: class { constructor(base, pattern) { this.baseUri = base; this.base = base.fsPath; this.pattern = pattern; } },
     ViewColumn: { Active: -1, One: 1, Two: 2 },
+    TabInputWebview: class { constructor(viewType) { this.viewType = viewType; } },
+    extensions: { getExtension: (id) => ui.extensions[id] },
     window: {
       get state() { return { focused: ui.focused }; },
       onDidChangeWindowState: windowState.event,
@@ -90,7 +95,33 @@ function install() {
   Module._load = function (request, ...rest) { return request === 'vscode' ? vscode : origLoad.call(this, request, ...rest); };
   ui.setFocus = (f) => { ui.focused = f; windowState.fire({ focused: f }); };
   /** Makes `input` the active tab's input (null: no tab) and fires onDidChangeTabs. */
-  ui.setActiveTab = (input) => { ui.tab = input; tabGroups.activeTabGroup.activeTab = input === null ? null : { input }; tabChange.fire({ opened: [], closed: [], changed: [] }); };
+  ui.setActiveTab = (input) => {
+    ui.tab = input;
+    const g = tabGroups.activeTabGroup;
+    let t = input === null ? null : g.tabs.find((x) => x.input === input);
+    if (input !== null && !t) { t = { label: '', input, group: g, isActive: false }; g.tabs.push(t); }
+    for (const x of g.tabs) x.isActive = x === t;
+    g.activeTab = t;
+    tabChange.fire({ opened: [], closed: [], changed: t ? [t] : [] });
+  };
+  /** Opens a tab ({ label, viewType } makes a webview tab, as VS Code prefixes it) in `group` and makes it active. */
+  ui.openTab = ({ label, viewType, group = tabGroups.activeTabGroup }) => {
+    const t = { label, input: new vscode.TabInputWebview(viewType), group, isActive: true };
+    for (const x of group.tabs) x.isActive = false;
+    group.tabs.push(t); group.activeTab = t;
+    tabChange.fire({ opened: [t], closed: [], changed: [] });
+    return t;
+  };
+  /** Makes an open tab active in its group. */
+  ui.activateTab = (t) => { for (const x of t.group.tabs) x.isActive = x === t; t.group.activeTab = t; tabChange.fire({ opened: [], closed: [], changed: [t] }); };
+  /** Closes a tab; the group's last remaining tab becomes active. */
+  ui.closeTab = (t) => {
+    const g = t.group; g.tabs = g.tabs.filter((x) => x !== t);
+    if (g.activeTab === t) { g.activeTab = g.tabs.at(-1) || null; if (g.activeTab) g.activeTab.isActive = true; }
+    tabChange.fire({ opened: [], closed: [t], changed: [] });
+  };
+  /** Clears every tab (between tests). */
+  ui.resetTabs = () => { for (const g of tabGroups.all) { g.tabs = []; g.activeTab = null; } ui.tab = null; };
   ui.setConfig = (key, value) => { ui.config[key] = value; configChange.fire({ affectsConfiguration: (sec) => key === sec || key.startsWith(sec + '.') }); };
   /** Shows the sidebar: resolves the registered view provider with a fake view. */
   ui.resolveSidebar = () => {

@@ -39,16 +39,15 @@ class TicketTab {
   /** Fetches the ticket, its newest comments and its neighbours; renders; mirrors. Throws if the ticket can't be read. */
   async load() {
     const { api } = this.owner;
-    const issue = await api.issue(this.key);
-    const { comments, total } = await api.comments(this.key);
-    const chain = await this.owner.chainFor(issue);
+    const got = await this.owner.fetchTicket(this.key);
     const priorities = await this.owner.priorities();
     if (this.disposed) return;
     const first = !this.loaded;
-    this.issue = issue; this.comments = comments || []; this.total = total == null ? this.comments.length : total;
+    const { issue, chain } = got;
+    this.issue = issue; this.comments = got.comments; this.total = got.total;
     this.loaded = true; this.reread = false;
     this.post({ type: 'render', issue, comments: this.comments, total: this.total, path: chain.path.map(crumb), me: this.owner.me, priorities, browseUrl: api.browseUrl(this.key) });
-    const file = this.owner.mirror.write(issue, this.comments, this.total, chain);
+    const file = this.owner.mirrorTicket(got);
     // opening counts as seen; new content later only while Sean can see it: the tab visible in the focused window
     if (first || (this.shell.isVisible() && this.owner.isFocused())) this.owner.markSeen(this.key);
     if (this.inFront()) this.owner.mirror.setCurrent(file);
@@ -153,6 +152,7 @@ class TicketTab {
  * @param o.getIndex()   the loader's issues by key (may be empty)
  * @param o.me           { accountId, displayName }
  * @param o.isFocused()  whether this window has focus
+ * @param o.keepFile(key) optional: true when another view still shows key, so closing jay's tab keeps its file
  */
 function createTickets(o) {
   const { vscode, extensionUri } = o;
@@ -188,6 +188,16 @@ function createTickets(o) {
       }
       return chainOf(issue.key, map);
     },
+    /** The ticket, its newest 50 comments and its chain, as a tab shows and mirrors them. Throws if the ticket can't be read. */
+    async fetchTicket(key) {
+      const issue = await o.api.issue(key);
+      const { comments, total } = await o.api.comments(key);
+      const chain = await owner.chainFor(issue);
+      const cs = comments || [];
+      return { issue, comments: cs, total: total == null ? cs.length : total, chain };
+    },
+    /** Writes what fetchTicket returned to ~/.jay/issues/<KEY>.jira; the file, or null with agent files off. */
+    mirrorTicket(got) { return o.mirror.write(got.issue, got.comments, got.total, got.chain); },
     viewChanged(tab) {
       if (!tab.shell.isActive()) return;
       owner.front = tab;
@@ -197,7 +207,7 @@ function createTickets(o) {
       tab.disposed = true;
       if (tabs.get(tab.key) === tab) tabs.delete(tab.key);
       if (owner.front === tab) owner.front = null;
-      o.mirror.closed(tab.key);
+      if (!(o.keepFile && o.keepFile(tab.key))) o.mirror.closed(tab.key);
     },
   };
 
@@ -253,6 +263,10 @@ function createTickets(o) {
 
   return {
     open: (key) => { open(key); },
+    /** Fetches and mirrors a ticket without a tab (the Atlassian view's clicks): { issue, comments, total, chain, file }. */
+    async loadAndMirror(key) { const got = await owner.fetchTicket(key); return { ...got, file: owner.mirrorTicket(got) }; },
+    /** Whether jay has a tab open for key. */
+    has: (key) => tabs.has(key),
     async refreshVisible() {
       for (const tab of [...tabs.values()]) {
         if (!tab.shell.isVisible()) continue;

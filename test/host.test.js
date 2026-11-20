@@ -75,12 +75,30 @@ function fakeTimers() {
     delays: () => [...pending.values()].map((t) => t.ms).sort((a, b) => a - b) };
 }
 
+const ATL_COMMAND = 'atlascode.jira.showIssueForKey';
+const ATL_TYPE = 'mainThreadWebview-react';
+/** Installs a fake Atlassian extension: its command opens a "react" webview tab titled with the key, or rejects. */
+function atlassian(o = {}) {
+  ui.extensions['atlassian.atlascode'] = { id: 'atlassian.atlascode' };
+  const tabs = {};
+  ui.commands[ATL_COMMAND] = async (key) => {
+    if (o.reject) throw new Error(o.reject);
+    tabs[key] = tabs[key] && tabs[key].group.tabs.includes(tabs[key]) ? (ui.activateTab(tabs[key]), tabs[key]) : ui.openTab({ label: key, viewType: ATL_TYPE });
+  };
+  return tabs;
+}
+const atlCalls = () => ui.executed.filter((c) => c[0] === ATL_COMMAND);
+const seenAt = (h, key) => { try { const t = JSON.parse(fs.readFileSync(path.join(h.jayDir, 'seen.json'), 'utf8')).tickets[key]; return t ? t.seen : null; } catch (_) { return null; } };
+
 const running = [];
 function start(o = {}) {
   for (const k of Object.keys(ui.config)) delete ui.config[k];
   for (const k of Object.keys(ui.workspaceConfig)) delete ui.workspaceConfig[k];
   Object.assign(ui.workspaceConfig, o.workspaceConfig || {});
   ui.panels.length = 0; ui.inputs.length = 0; ui.inputOptions.length = 0; ui.out.length = 0; ui.watchers.length = 0;
+  ui.infos.length = 0; ui.executed.length = 0; ui.resetTabs();
+  for (const k of Object.keys(ui.extensions)) delete ui.extensions[k];
+  delete ui.commands[ATL_COMMAND];
   ui.focused = o.focused !== undefined ? o.focused : true;
   const home = o.home || fs.mkdtempSync(path.join(os.tmpdir(), 'jay-host-'));
   const world = Object.assign({
@@ -1153,4 +1171,150 @@ test('sidebar search: an assignee listed in jay.placeholderAssignees has owner n
   await settle();
   const [r] = searchReplies(h.view);
   assert.strictEqual(r.items[0].owner, 'none'); assert.strictEqual(r.items[0].assignee, 'Bo Sample');
+});
+
+// ---- jay.ticketView (design 101, "Which view opens a ticket")
+test('ticketView default: a click opens the Atlassian page, writes the file, marks seen and current.jira', async () => {
+  const h = start();
+  const tabs = atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' });
+  await settle();
+  assert.deepStrictEqual(atlCalls(), [[ATL_COMMAND, 'DEMO-1']]);
+  assert.strictEqual(ui.panels.length, 0, "jay's own tab isn't opened");
+  assert.strictEqual(ui.infos.length, 0);
+  const file = path.join(h.jayDir, 'issues', 'DEMO-1.jira');
+  assert.ok(fs.readFileSync(file, 'utf8').includes('DEMO-1 title'));
+  assert.ok(fs.readFileSync(file, 'utf8').includes('## Tree'), 'with the chain, as in jay\'s tab');
+  assert.ok(seenAt(h, 'DEMO-1') != null, 'marked seen and saved');
+  assert.ok(fs.readFileSync(path.join(h.jayDir, 'current.jira'), 'utf8').includes('DEMO-1'));
+  assert.ok(tabs['DEMO-1'], 'the Atlassian tab opened');
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), file);
+  const gets = h.fetch.calls.filter((c) => /\/issue\/DEMO-1(\?|$)/.test(c.url)).length;
+  assert.strictEqual(gets, 1, 'the click fetched once; the tab appearing did not fetch again');
+  assert.ok(h.fetch.calls.some((c) => /\/issue\/DEMO-1\/comment/.test(c.url) && /maxResults=50/.test(c.url)), 'the newest 50 comments');
+});
+
+test('ticketView default, unfocused window: the file and seen, but no current.jira', async () => {
+  const h = start({ focused: false });
+  atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' });
+  await settle();
+  assert.ok(fs.existsSync(path.join(h.jayDir, 'issues', 'DEMO-1.jira')));
+  assert.ok(!fs.existsSync(path.join(h.jayDir, 'current.jira')));
+});
+
+test('ticketView: no Atlassian extension opens jay\'s tab, with one info message per window session', async () => {
+  const h = start();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' });
+  assert.strictEqual(ui.panels.at(-1).title, 'DEMO-1', "jay's tab, at once");
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' });
+  await settle();
+  assert.strictEqual(ui.panels.length, 2);
+  assert.strictEqual(atlCalls().length, 0);
+  assert.strictEqual(ui.infos.length, 1);
+  assert.match(ui.infos[0], /^Opened in jay's view: /);
+  assert.strictEqual(ui.out.filter((l) => l.includes("jay's view")).length, 2, 'logged every time');
+});
+
+test('ticketView: the Atlassian command failing opens jay\'s tab, message once', async () => {
+  const h = start();
+  atlassian({ reject: 'no such issue page' });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' });
+  await settle();
+  assert.strictEqual(atlCalls().length, 2);
+  assert.deepStrictEqual(ui.panels.map((p) => p.title), ['DEMO-1', 'DEMO-2']);
+  assert.deepStrictEqual(ui.infos, ["Opened in jay's view: no such issue page"]);
+  assert.strictEqual(ui.out.filter((l) => l.includes('no such issue page')).length, 2);
+});
+
+test('ticketView "jay": jay\'s tab, no Atlassian call', async () => {
+  const h = start({ config: { 'jay.ticketView': 'jay' } });
+  atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' });
+  await settle();
+  assert.strictEqual(ui.panels.at(-1).title, 'DEMO-1');
+  assert.strictEqual(atlCalls().length, 0);
+  assert.strictEqual(ui.infos.length, 0);
+});
+
+test('ticketView: a failed fetch writes no file and marks nothing seen', async () => {
+  const h = start();
+  atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-404' });
+  await settle();
+  assert.deepStrictEqual(atlCalls(), [[ATL_COMMAND, 'DEMO-404']]);
+  assert.ok(!fs.existsSync(path.join(h.jayDir, 'issues', 'DEMO-404.jira')));
+  assert.strictEqual(seenAt(h, 'DEMO-404'), null);
+  assert.ok(!fs.existsSync(path.join(h.jayDir, 'current.jira')));
+  assert.strictEqual(ui.panels.length, 0, 'the Atlassian page shows its own "not found"');
+});
+
+test('ticketView: the active Atlassian tab of a tracked key is the ticket in front; untracked or non-key tabs are ignored', async () => {
+  const h = start();
+  const tabs = atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' }); await settle();
+  const f1 = path.join(h.jayDir, 'issues', 'DEMO-1.jira'); const f2 = path.join(h.jayDir, 'issues', 'DEMO-2.jira');
+  const current = () => fs.readFileSync(path.join(h.jayDir, 'current.jira'), 'utf8');
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), f2);
+  ui.activateTab(tabs['DEMO-1']); await settle();
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), f1);
+  assert.ok(/^# Jira \w+ DEMO-1:/.test(current()));
+  // a "react" tab jay didn't open, and one whose title isn't a key
+  ui.openTab({ label: 'DEMO-9', viewType: ATL_TYPE }); await settle();
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), null);
+  assert.ok(/^# Jira \w+ DEMO-1:/.test(current()), 'current.jira kept');
+  ui.openTab({ label: 'Create issue', viewType: ATL_TYPE }); await settle();
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), null);
+  assert.ok(!h.fetch.calls.some((c) => c.url.includes('DEMO-9')));
+  ui.activateTab(tabs['DEMO-2']); await settle();
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), f2);
+  assert.ok(/^# Jira \w+ DEMO-2:/.test(current()));
+  ui.setConfig('jay.agentFiles', false);
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), null);
+});
+
+test('ticketView: the Atlassian tab in front is re-fetched at most once per 30 s, and by the tab poll', async () => {
+  const h = start();
+  const tabs = atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' }); await settle();
+  const gets = () => h.fetch.calls.filter((c) => /\/issue\/DEMO-1(\?|$)/.test(c.url)).length;
+  assert.strictEqual(gets(), 1);
+  ui.activateTab(tabs['DEMO-1']); await settle();
+  assert.strictEqual(gets(), 1, 'within 30 s of the click: no re-fetch');
+  h.clock.t += 31000;
+  h.world.children.push(raw('DEMO-3', { parent: 'DEMO-1' }));
+  ui.activateTab(tabs['DEMO-2']); ui.activateTab(tabs['DEMO-1']); await settle();
+  assert.strictEqual(gets(), 2, 'after 30 s: re-fetched once');
+  h.clock.t += 31000;
+  h.api.pollers[1].kick(); await settle();
+  assert.strictEqual(gets(), 3, 'the tab poll refreshed the Atlassian tab in front');
+});
+
+test('ticketView: closing the tracked Atlassian tab removes its file', async () => {
+  const h = start();
+  const tabs = atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle();
+  const f1 = path.join(h.jayDir, 'issues', 'DEMO-1.jira');
+  assert.ok(fs.existsSync(f1));
+  const other = ui.openTab({ label: 'DEMO-1', viewType: 'mainThreadWebview-somethingElse' });
+  ui.closeTab(tabs['DEMO-1']); await settle();
+  assert.ok(!fs.existsSync(f1), 'removed, whatever other tab has the same title');
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), null);
+  ui.closeTab(other);
+  // no longer tracked: a new "react" tab with that title is ignored until it is clicked again
+  ui.openTab({ label: 'DEMO-1', viewType: ATL_TYPE }); await settle();
+  assert.strictEqual(await ui.commands['jay.activeIssueFile'](), null);
 });

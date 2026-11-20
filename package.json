@@ -151,6 +151,13 @@
           "default": ["key", "summary", "status"],
           "description": "The columns the sidebar shows on each row, in order. The summary is always shown."
         },
+        "jay.ticketView": {
+          "type": "string",
+          "enum": ["atlassian", "jay"],
+          "enumDescriptions": ["The issue page of Atlassian's own extension (atlassian.atlascode), falling back to jay's tab when it isn't installed or fails", "jay's own ticket tab"],
+          "default": "atlassian",
+          "description": "Which view a click on a ticket opens, in the tree, in Jira results and on \"Open KEY\"."
+        },
         "jay.agentFiles": {
           "type": "boolean",
           "default": true,

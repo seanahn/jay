@@ -8,7 +8,7 @@ test('manifest', () => {
   assert.deepStrictEqual(Object.keys(p.dependencies || {}), []);
   const props = p.contributes.configuration.properties;
   assert.deepStrictEqual(Object.keys(props).sort(), ['jay.agentFiles','jay.columns','jay.period','jay.placeholderAssignees','jay.quarter.fiscalYearStart',
-    'jay.quarter.patterns','jay.signIn.refreshCommand','jay.signIn.tokenFile','jay.site']);
+    'jay.quarter.patterns','jay.signIn.refreshCommand','jay.signIn.tokenFile','jay.site','jay.ticketView']);
   assert.strictEqual(props['jay.quarter.fiscalYearStart'].default, 1);
   assert.deepStrictEqual(props['jay.quarter.patterns'].default, ['label:FY{YYYY}Q{Q}', 'label:FY{YY}-Q{Q}', 'summary:[Q{Q}FY{YY}]']);
   assert.deepStrictEqual(props['jay.placeholderAssignees'].default, []);
@@ -19,6 +19,10 @@ test('manifest', () => {
   for (const k of ['jay.site', 'jay.signIn.tokenFile', 'jay.signIn.refreshCommand']) assert.ok(!['resource', 'language-overridable', 'machine', 'machine-overridable'].includes(props[k].scope), k);
   assert.strictEqual(props['jay.period'].default, 'quarter');
   assert.deepStrictEqual(props['jay.period'].enum, ['quarter', 'sprint', 'fixVersion']);
+  assert.strictEqual(props['jay.ticketView'].default, 'atlassian');
+  assert.deepStrictEqual(props['jay.ticketView'].enum, ['atlassian', 'jay']);
+  assert.strictEqual(props['jay.ticketView'].enumDescriptions.length, 2);
+  assert.strictEqual(p.extensionDependencies, undefined, 'the Atlassian extension is a soft dependency');
   const hidden = p.contributes.menus.commandPalette.find((m) => m.command === 'jay.activeIssueFile');
   assert.strictEqual(hidden.when, 'false');
 });

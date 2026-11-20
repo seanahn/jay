@@ -97,6 +97,26 @@ recently released ones.
 For sprints and versions, the tickets carry the period, and jay shows
 each one under its epic, with "No epic" last.
 
+## Which view opens a ticket
+
+`jay.ticketView` decides what a click opens, in the tree, in "Jira
+results" and on "Open KEY".
+
+- **`atlassian` (the default):** the issue page of Atlassian's own
+  extension, "Atlassian: Jira, Rovo Dev, Bitbucket"
+  (`atlassian.atlascode`). jay keeps its sidebar.
+- **A soft dependency:** jay doesn't require that extension. If it
+  isn't installed, or its command fails, jay opens its own tab instead
+  and says "Opened in jay's view: <reason>" once per window.
+- **The agent still knows the ticket.** On each click jay fetches the
+  ticket and writes `~/.jay/issues/<KEY>.jira` and `current.jira`, as
+  for its own tab. While the Atlassian page of a ticket jay opened is the
+  active tab, it is the ticket in front; closing that page removes its
+  file.
+- **`jay`:** jay's own ticket tab, described below. Set
+  `"jay.ticketView": "jay"` in your settings to always use it, for
+  example if the Atlassian extension changes.
+
 ## Editing in the tab
 
 - **Fields:** status (Jira's transitions for the ticket), assignee
@@ -153,8 +173,8 @@ Everything is under `~/.jay`, with directories mode 700 and files mode
 
 - `cache/`: the cached trees. Each file belongs to the account that
   wrote it and is never shown to another.
-- `issues/*.jira`: one file per open ticket tab, removed when the tab
-  closes.
+- `issues/*.jira`: one file per open ticket tab (jay's, or an
+  Atlassian page jay opened), removed when the tab closes.
 - `current.jira`: the ticket most recently in front.
 - `seen.json`: when you last looked at each ticket.
 
@@ -174,6 +194,7 @@ all of these. jay never writes a token file.
 | `jay.quarter.patterns` | `["label:FY{YYYY}Q{Q}", "label:FY{YY}-Q{Q}", "summary:[Q{Q}FY{YY}]"]` | How epics mark their quarter |
 | `jay.placeholderAssignees` | `[]` | Display names or account ids that count as unclaimed, for example `["Team Queue"]` |
 | `jay.columns` | `["key", "summary", "assignee", "status"]` | Row columns, in order; also `type`, `priority`, `due`, `labels`, `estimate` |
+| `jay.ticketView` | `atlassian` | What a click opens: `atlassian`, the Atlassian extension's issue page (jay's tab if it isn't installed or fails), or `jay`, jay's own tab |
 | `jay.agentFiles` | `true` | Write each open ticket to `~/.jay` for an agent |
 
 `jay.site`, `jay.signIn.tokenFile` and `jay.signIn.refreshCommand` are read only from your user settings (or the remote's settings in a remote window); a workspace's `.vscode/settings.json` can't change them.

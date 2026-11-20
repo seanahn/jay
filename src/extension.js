@@ -13,6 +13,7 @@ const { createEvents } = require('./events');
 const { createMirror } = require('./mirror');
 const { createWriter } = require('./writes');
 const { createTickets, KEY_RE } = require('./ticket');
+const { createAtlassianView } = require('./atlassian');
 const { Sidebar } = require('./sidebar');
 const { createPoller } = require('./poller');
 
@@ -108,7 +109,10 @@ function activate(context, deps = {}) {
   const mirror = createMirror({ dir: jayDir, enabled: () => cfg('agentFiles', true) !== false, browseUrl: (k) => apiRef.browseUrl(k) });
   const periods = createPeriods({ api: apiRef, store, cfg, now });
   const tickets = createTickets({ vscode, extensionUri: context.extensionUri, api: apiRef, writer: writerRef, mirror, events: eventsRef,
-    getIndex: () => (s.view ? s.view.index : new Map()), me, isFocused, log });
+    getIndex: () => (s.view ? s.view.index : new Map()), me, isFocused, log, keepFile: (k) => atlassian.keeps(k) });
+  // jay.ticketView: the one way a click in the sidebar opens a ticket (design 101, "Which view opens a ticket")
+  const atlassian = createAtlassianView({ vscode, tickets, mirror, view: () => cfg('ticketView', 'atlassian'),
+    markSeen: (k) => { eventsRef.seen(k); eventsRef.save(); }, isFocused, log, now });
 
   /** The 5 most recently picked project keys, newest first (globalState jay.recentProjects). */
   const recentProjects = () => { const r = store.get('jay.recentProjects'); return Array.isArray(r) ? r.filter((k) => typeof k === 'string').slice(0, 5) : []; };
@@ -352,7 +356,7 @@ function activate(context, deps = {}) {
   function signOutHere() {
     // stop everything that could write under ~/.jay first, so nothing re-creates a file once it is cleared
     stopAll();
-    tickets.disposeAll();
+    tickets.disposeAll(); atlassian.clear();
     Object.assign(s, { running: false, starting: false, auth: null, api: null, writer: null, me: null, session: null, events: null, view: null, fresh: false,
       projects: [], trusted: null, remembered: false, mineKeys: new Set(), mineOkAt: null, error: null, notes: {}, cleared: true });
     Object.assign(me, { accountId: null, displayName: null });
@@ -429,7 +433,9 @@ function activate(context, deps = {}) {
   async function pollTabs() {
     const g0 = s.gen;
     await ensureSession();
-    if (live(g0)) await tickets.refreshVisible();
+    if (!live(g0)) return;
+    await tickets.refreshVisible();
+    if (live(g0)) await atlassian.refreshFront();
   }
 
   async function pollMine() {
@@ -499,7 +505,7 @@ function activate(context, deps = {}) {
     if (m.type === 'signIn') { signIn().catch(log); return; }
     if (m.type === 'open') {
       const key = typeof m.key === 'string' ? m.key.trim().toUpperCase() : '';
-      if (KEY_RE.test(key) && s.running) tickets.open(key);
+      if (KEY_RE.test(key) && s.running) atlassian.open(key).catch(log);
       return;
     }
     if (m.type === 'search') { searchJira(m); return; }
@@ -530,7 +536,7 @@ function activate(context, deps = {}) {
     watcher = null;
     stopFileCheck();
     // the tabs stay: VS Code disposes the panels itself, and the serializer restores them after a reload
-    tickets.dispose();
+    tickets.dispose(); atlassian.dispose();
   }
 
   context.subscriptions.push(
@@ -543,7 +549,7 @@ function activate(context, deps = {}) {
     vscode.commands.registerCommand('jay.signIn', () => signIn()),
     vscode.commands.registerCommand('jay.signOut', () => signOut()),
     vscode.commands.registerCommand('jay.focusSearch', () => sidebar.focusSearch()),
-    vscode.commands.registerCommand('jay.activeIssueFile', () => (cfg('agentFiles', true) === false ? null : tickets.frontFile())),
+    vscode.commands.registerCommand('jay.activeIssueFile', () => (cfg('agentFiles', true) === false ? null : atlassian.frontFile() || tickets.frontFile())),
     out,
   );
 

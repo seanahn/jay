@@ -271,6 +271,42 @@ leaves the cached tree in place with a quiet "Offline, retrying" line.
 Clicking a row opens the ticket in the middle. If the ticket's tab is
 already open, clicking focuses it.
 
+### Which view opens a ticket
+
+Sean asked for this on 2026-11-20. He likes the ticket page of
+Atlassian's own extension ("Atlassian: Jira, Rovo Dev, Bitbucket",
+`atlassian.atlascode`) for the middle pane. jay keeps its sidebar.
+
+- **`jay.ticketView`** is either `"atlassian"` (the default) or
+  `"jay"`. It decides what a click opens, in the tree, in Jira results,
+  and on "Open <KEY>".
+- **`"atlassian"`:** jay runs `atlascode.jira.showIssueForKey` with the
+  key, which opens the Atlassian extension's issue page. jay's own tab
+  isn't opened.
+- **The dependency is soft.** jay does not list the Atlassian extension
+  in its manifest. If the extension isn't installed, or the command
+  fails, jay opens its own tab instead. It shows "Opened in jay's view:
+  <reason>" once per window session and logs the reason. Switching the
+  setting to `"jay"` is the way out if Atlassian's side changes.
+- **jay's own tab stays fully supported,** described below under "The
+  ticket tab".
+- **Claude still knows the ticket.** On each click, jay fetches the
+  ticket and writes `~/.jay/issues/<KEY>.jira`, as it does when opening
+  its own tab. It also marks the ticket seen and writes `current.jira`
+  when the window is focused.
+- **Tracking the tab in front.** jay watches the editor tabs. When the
+  active tab is a webview whose title contains a ticket key, and jay has
+  opened that key in this window, jay treats it as the ticket in front:
+  it refreshes that ticket's file, writes `current.jira`, and answers
+  `jay.activeIssueFile` with it. perch also lists the Atlassian
+  extension's webview type, so its IDE context names that file. When no
+  key can be read from the title, `current.jira` keeps the last clicked
+  ticket. This depends on Atlassian's tab titles, which is the fragile
+  part.
+- **Issue files and closing tabs.** When an Atlassian issue tab that
+  jay was tracking closes, jay removes that ticket's file, as it does for
+  its own tabs.
+
 ### The ticket tab
 
 A webview panel per ticket, titled with the key. It shows:
@@ -731,6 +767,7 @@ cache, then refreshes it in full.
 | `jay.quarter.patterns` | the three templates above | How epics mark their quarter |
 | `jay.placeholderAssignees` | `[]` | Display names or account ids that count as unclaimed |
 | `jay.columns` | `["key","summary","status"]` | Tree and search-result columns, in order: key, summary, assignee, status, type, priority, due, labels, estimate |
+| `jay.ticketView` | `"atlassian"` | `"atlassian"`: open tickets in the Atlassian extension's page, falling back to jay's own tab; `"jay"`: jay's own tab |
 | `jay.agentFiles` | true | Write `~/.jay/issues/*.jira` and `current.jira` |
 
 `jay.site`, `jay.signIn.tokenFile` and `jay.signIn.refreshCommand` are read only from your user settings (or the remote's settings in a remote window; no `machine` scope, which remote windows would ignore), so a repo's workspace settings can't send the token elsewhere or pick a command to run.
