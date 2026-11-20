@@ -504,3 +504,45 @@ test('the CSS indents 8px per tree level', () => {
   assert.ok(/\.row\.depth1\s*\{[^}]*padding-left:\s*8px/.test(CSS));
   assert.ok(/\.row\.depth2\s*\{[^}]*padding-left:\s*16px/.test(CSS));
 });
+
+// shared title labels
+const labelTree = (nodes) => [{ id: 'g', title: 'Epics', nodes }];
+const sumOf = (p, key) => p.d.querySelector('.row[data-key="' + key + '"] .col-summary').textContent;
+const labelPage = (nodes) => { const p = page(); p.send(state({ columns: ['key', 'summary'], groups: labelTree(nodes) })); return p; };
+
+test('a child whose title starts with the parent label shows the rest; tooltip keeps the full title', () => {
+  const p = labelPage([node('DEMO-1', 'Acme Portal: GA', { kind: 'epic', children: [node('DEMO-2', 'Acme Portal: threat model', { mine: true })] })]);
+  assert.strictEqual(sumOf(p, 'DEMO-1'), 'Acme Portal: GA');
+  assert.strictEqual(sumOf(p, 'DEMO-2'), 'threat model');
+  assert.ok(p.d.querySelector('.row[data-key="DEMO-2"]').getAttribute('title').includes('Acme Portal: threat model'));
+});
+
+test('label match is case-insensitive and ignores whitespace after the colon', () => {
+  const p = labelPage([node('DEMO-1', 'Acme Portal:  GA', { kind: 'epic', children: [node('DEMO-2', 'ACME portal:threat model', { mine: true })] })]);
+  assert.strictEqual(sumOf(p, 'DEMO-2'), 'threat model');
+});
+
+test('a non-matching label is untouched', () => {
+  const p = labelPage([node('DEMO-1', 'Acme Portal: GA', { kind: 'epic', children: [node('DEMO-2', 'Other Thing: x', { mine: true })] })]);
+  assert.strictEqual(sumOf(p, 'DEMO-2'), 'Other Thing: x');
+});
+
+test('a sub-task compares with its task full title, not the stripped one', () => {
+  const p = labelPage([node('DEMO-1', 'Acme Portal: GA', { kind: 'epic', children: [
+    node('DEMO-2', 'Acme Portal: Review: docs', { children: [node('DEMO-3', 'Review: docs: fix', { kind: 'subtask', mine: true }), node('DEMO-4', 'Acme Portal: Review: docs: other', { kind: 'subtask', mine: true })] })] })]);
+  assert.strictEqual(sumOf(p, 'DEMO-2'), 'Review: docs');
+  assert.strictEqual(sumOf(p, 'DEMO-3'), 'Review: docs: fix', 'parent label is "Acme Portal:", not "Review:"');
+  assert.strictEqual(sumOf(p, 'DEMO-4'), 'Review: docs: other');
+});
+
+test('an empty remainder keeps the full title', () => {
+  const p = labelPage([node('DEMO-1', 'Acme Portal: GA', { kind: 'epic', children: [node('DEMO-2', 'Acme Portal:', { mine: true })] })]);
+  assert.strictEqual(sumOf(p, 'DEMO-2'), 'Acme Portal:');
+});
+
+test('search results are not stripped', () => {
+  const p = page(); p.send(state({ mode: 'all', columns: ['key', 'summary'], groups: labelTree([node('DEMO-1', 'Acme Portal: GA', { kind: 'epic' })]) }));
+  search(p, 'widget'); p.advance(400);
+  results(p, 1, [item('OTH-7', 'Acme Portal: threat model')]);
+  assert.strictEqual(jiraRows(p)[0].querySelector('.col-summary').textContent, 'Acme Portal: threat model');
+});

@@ -120,10 +120,21 @@
   const DEFAULT_COLUMNS = ['key', 'summary', 'status'];
   const columnList = () => (Array.isArray(state.columns) && state.columns.length ? state.columns : DEFAULT_COLUMNS);
   const orDash = (v) => (v === undefined || v === null || v === '' ? '-' : String(v));
-  function cellText(n, c) {
+  // "Label: rest" -> "Label:" when the colon ends the title or is followed by whitespace and the label is 1-60 chars
+  function titleLabel(title) {
+    const m = /^([^:]*:)(?=\s|$)/.exec(String(title || ''));
+    return m && m[1].length > 1 && m[1].length <= 60 ? m[1] : '';
+  }
+  // a child title minus its parent's shared label (parent's FULL title); the full title if nothing would remain
+  function stripLabel(title, parentTitle) {
+    const label = titleLabel(parentTitle), t = String(title === undefined || title === null ? '' : title);
+    if (!label || t.slice(0, label.length).toLowerCase() !== label.toLowerCase()) return t;
+    return t.slice(label.length).replace(/^\s+/, '') || t;
+  }
+  function cellText(n, c, parentTitle) {
     switch (c) {
       case 'key': return state.project && n.key.startsWith(state.project + '-') ? n.key.slice(state.project.length + 1) : orDash(n.key);
-      case 'summary': return orDash(n.summary);
+      case 'summary': return orDash(parentTitle === undefined ? n.summary : stripLabel(n.summary, parentTitle));
       case 'assignee': return n.mine ? 'me' : orDash(n.who);
       case 'status': return n.status && n.status !== 'To Do' ? n.status : '';   // To Do stays empty
       case 'type': return orDash(n.type);
@@ -145,7 +156,7 @@
   }
   const OWNERS = ['me', 'other', 'none'];
 
-  function rowFor(n, depth) {
+  function rowFor(n, depth, parentTitle) {
     const ev = (state.events || {})[n.key] || {};
     const row = el('div', 'row depth' + Math.min(depth, 2));
     row.classList.add(n.mine ? 'mine' : 'other');
@@ -156,22 +167,22 @@
     row.dataset.key = n.key; row.setAttribute('role', 'treeitem'); row.setAttribute('title', tooltip(n));
     const twisty = el('span', 'twisty', ''); twisty.dataset.toggle = n.key;
     row.append(twisty);
-    for (const c of columnList()) row.append(el('span', 'col-' + c + (c === 'assignee' && n.mine ? ' me' : '') + (c === 'key' ? ' owner-' + (OWNERS.includes(n.owner) ? n.owner : 'none') : ''), cellText(n, c)));
+    for (const c of columnList()) row.append(el('span', 'col-' + c + (c === 'assignee' && n.mine ? ' me' : '') + (c === 'key' ? ' owner-' + (OWNERS.includes(n.owner) ? n.owner : 'none') : ''), cellText(n, c, parentTitle)));
     if (ev.newEpic) row.append(el('span', 'newmark', 'new'));
     return row;
   }
 
-  function walk(nodes, depth, q, out) {
+  function walk(nodes, depth, q, out, parentTitle) {
     for (const n of nodes) {
       if (q && !subtreeHas(n, q)) continue;
-      const row = rowFor(n, depth);
+      const row = rowFor(n, depth, parentTitle);
       const kids = n.children.length > 0;
       const forced = !!q && n.children.some((c) => subtreeHas(c, q));   // search opens the ancestors of matches only
       const open = kids && (forced || isOpen(n));
       row.querySelector('.twisty').textContent = kids ? (open ? '⌄' : '›') : '';
       if (!kids) row.querySelector('.twisty').dataset.toggle = '';
       out.push(row);
-      if (open) walk(n.children, depth + 1, q, out);
+      if (open) walk(n.children, depth + 1, q, out, n.summary);
     }
   }
 

@@ -193,6 +193,12 @@ ignored, and `summary` is always shown.
   level is indented 8 px. A ticket in the selected project shows only
   its number in the key column (`16324`). Tickets from other projects
   (for example in Jira results) keep their full key.
+- **Shared title labels are stripped** (Sean, 2026-11-20). When a
+  parent's title starts with a label ending in a colon (for example
+  `C3 Code Self-Serve:`), a child whose title starts with the same label
+  shows only the rest. The comparison ignores case and the spaces after
+  the colon. This applies only to tree rows. The tooltip, the ticket tab
+  and the agent file keep the full title.
 - **The tooltip** on every row (tree and Jira results) shows, one per
   line: the full key and type, the full title, the assignee (or
   "Unassigned"), the status, and then the priority, due date, original
