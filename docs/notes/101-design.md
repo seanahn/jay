@@ -656,6 +656,9 @@ The sidebar shows which one is in use: "Signed in as … (API token)" or
     fails, rather than re-running the command on every call.
 - jay also re-reads the file whenever it changes on disk, so a login
   from a terminal is picked up within a few seconds.
+  Because file watching is unreliable outside the workspace and over
+  remote connections, jay also checks the file's modification time
+  every 30 seconds while signed out because of it.
 - **If the refresh command fails, or isn't set and the token has
   expired,** jay stops polling. The sidebar shows "Sign in again with
   the tool that writes the token file", and jay watches the file.

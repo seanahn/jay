@@ -222,7 +222,7 @@ test('SignInNeeded stops polling and a token file change resumes', async () => {
   const st = lastState(h.view);
   assert.strictEqual(st.signedIn, false);
   assert.strictEqual(st.error, 'Sign in again with the tool that writes the token file');
-  assert.strictEqual(h.timers.pending.size, 0, 'all three pollers stopped');
+  assert.deepStrictEqual(h.timers.delays(), [30000], 'all three pollers stopped; only the token file check is waiting');
   const n = h.fetch.calls.length;
   h.timers.fire(); await settle();
   assert.strictEqual(h.fetch.calls.length, n, 'no polls while signed out');
@@ -235,6 +235,67 @@ test('SignInNeeded stops polling and a token file change resumes', async () => {
   assert.strictEqual(lastState(h.view).error, null);
   assert.ok(h.fetch.calls.length > n, 'polling resumed');
   assert.strictEqual(h.timers.pending.size, 3);
+});
+
+const EXPIRED = () => JWT({ sub: 'x', exp: Math.floor(Date.UTC(2027, 0, 15, 12) / 1000) - 3600 });
+function rewrite(file, token, bump = 5000) {   // another tool's atomic temp+rename: new inode and mtime, no watcher event
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify({ access_token: token, cloud_id: 'cloud-1', jira_url: SITE }));
+  const t = new Date(Date.now() + bump); fs.utimesSync(tmp, t, t);
+  fs.renameSync(tmp, file);
+}
+
+test('expired token file, no refresh command: a renewed file is noticed by the 30 s check without a watcher event', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jay-tfm-'));
+  const file = tokenFile(home, EXPIRED());
+  const h = start({ home, config: { 'jay.signIn.tokenFile': file } });
+  await settle();
+  assert.strictEqual(lastState(h.view).signedIn, false);
+  assert.strictEqual(lastState(h.view).error, 'Sign in again with the tool that writes the token file');
+  assert.deepStrictEqual(h.timers.delays(), [30000], 'the file is checked every 30 s');
+  h.timers.fire(); await settle();   // unchanged: stays signed out, checks again
+  assert.strictEqual(lastState(h.view).signedIn, false);
+  assert.deepStrictEqual(h.timers.delays(), [30000]);
+  rewrite(file, JWT({ sub: 'fresh' }));
+  h.timers.fire(); await settle();
+  assert.strictEqual(lastState(h.view).signedIn, true, 'signed in again');
+  assert.strictEqual(h.timers.pending.size, 3, 'only the pollers: no file check once running');
+});
+
+test('a token file that appears later is noticed by the 30 s check', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jay-tfa-'));
+  const file = path.join(home, 'creds.json');
+  const h = start({ home, config: { 'jay.signIn.tokenFile': file } });
+  await settle();
+  assert.strictEqual(lastState(h.view).signedIn, false);
+  assert.deepStrictEqual(h.timers.delays(), [30000]);
+  tokenFile(home);
+  h.timers.fire(); await settle();
+  assert.strictEqual(lastState(h.view).signedIn, true);
+});
+
+test('the token file check stops on Sign Out, on a token file setting change, and on dispose', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jay-tfs-'));
+  const file = tokenFile(home, EXPIRED());
+  let h = start({ home, config: { 'jay.signIn.tokenFile': file } });
+  await settle();
+  assert.deepStrictEqual(h.timers.delays(), [30000]);
+  await ui.commands['jay.signOut']();
+  assert.strictEqual(h.timers.pending.size, 0, 'Sign Out');
+  ext.deactivate(); running.length = 0;
+
+  h = start({ home, config: { 'jay.signIn.tokenFile': file } });
+  await settle();
+  assert.deepStrictEqual(h.timers.delays(), [30000]);
+  ui.setConfig('jay.signIn.tokenFile', '');
+  await settle();
+  assert.strictEqual(h.timers.pending.size, 3, 'the setting changed away from the token file: only the pollers (API token sign-in)');
+
+  h = start({ home, config: { 'jay.signIn.tokenFile': file } });
+  await settle();
+  assert.deepStrictEqual(h.timers.delays(), [30000]);
+  ext.deactivate(); running.length = 0;
+  assert.strictEqual(h.timers.pending.size, 0, 'dispose');
 });
 
 test('API token rejected: the sidebar says to sign in again', async () => {
@@ -560,7 +621,7 @@ test('a 401 from an env token file says to update the token in the file and stop
   const st = lastState(h.view);
   assert.strictEqual(st.signedIn, false);
   assert.strictEqual(st.error, 'Update the Jira API token in ~/jira-mcp');
-  assert.strictEqual(h.timers.pending.size, 0, 'all pollers stopped');
+  assert.deepStrictEqual(h.timers.delays(), [30000], 'all pollers stopped; only the token file check is waiting');
   assert.ok(!JSON.stringify(h.view.webview.posted).includes('tok-secret-xyz') && !ui.out.some((l) => l.includes('tok-secret-xyz')));
 });
 

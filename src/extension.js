@@ -2,7 +2,7 @@
 // jay: Jira Cloud in VS Code. Wires sign-in, the three pollers, the sidebar and the ticket tabs (design 101, "Signing in",
 // "Polling", "Settings", "What catches Sean's eye", "How the agent knows the ticket in front").
 const vscode = require('vscode');
-const os = require('os'); const path = require('path');
+const fs = require('fs'); const os = require('os'); const path = require('path');
 const { SignInNeeded, createApiTokenAuth, createFileAuth, runCommand } = require('./auth');
 const { createHttp } = require('./http');
 const { createApi, FIELDS } = require('./api');
@@ -35,6 +35,8 @@ const WRITES = ['saveText', 'addComment', 'editComment', 'setField', 'transition
 const SEARCH_MAX = 20;
 const COLUMN_NAMES = ['key', 'summary', 'assignee', 'status', 'type', 'priority', 'due', 'labels', 'estimate'];
 const DEFAULT_COLUMNS = ['key', 'summary', 'status'];
+const FILE_CHECK_MS = 30000;   // how often a token file that jay is signed out because of is stat'ed, whatever the watcher says
+const realTimers = { set: setTimeout, clear: clearTimeout };
 const SEARCH_FAILED = 'Jira search failed';
 const NOT_SIGNED_IN = { ok: false, kind: 'failed', message: 'Not signed in' };
 
@@ -234,7 +236,7 @@ function activate(context, deps = {}) {
     });
   }
 
-  function stopAll() { s.gen++; for (const p of pollers) p.stop(); }
+  function stopAll() { s.gen++; for (const p of pollers) p.stop(); stopFileCheck(); }
 
   /** Builds the sign-in from the settings and secrets, and polls if there is one. */
   async function restart() {
@@ -251,7 +253,7 @@ function activate(context, deps = {}) {
     const fingerprint = auth ? await fingerprintOf() : null;
     if (g0 !== s.gen) return;
     s.starting = false;
-    if (!auth) { s.error = userOut() ? null : signInText('none'); render(); return; }
+    if (!auth) { s.error = userOut() ? null : signInText('none'); render(); startFileCheck(); return; }
     s.auth = auth; s.api = createApi(createHttp({ auth, fetch: fetchFn }), auth); s.cleared = false;
     Object.assign(s, { fingerprint, projectsLoad: null, projectsLoaded: false, projectsStale: false });
     if (!s.events) s.events = createEvents({ file: path.join(jayDir, 'seen.json'), now });
@@ -275,6 +277,32 @@ function activate(context, deps = {}) {
     stopAll();
     s.running = false; s.error = signInText(reason, s.auth && s.auth.kind, userCfg('signIn.tokenFile', ''));
     render();
+    startFileCheck();
+  }
+
+  // File watching is unreliable for files outside the workspace and over Remote-SSH: while signed out because of the token file,
+  // its mtime and size are also checked every 30 s, and a change since the sign-out (or the file appearing) restarts.
+  const timers = deps.timers || realTimers;
+  let fileCheck = null;   // { timer, sig, file }
+  function stopFileCheck() { if (fileCheck && fileCheck.timer !== null) timers.clear(fileCheck.timer); fileCheck = null; }
+  const sigOf = (file) => fs.promises.stat(file).then((st) => `${st.mtimeMs}:${st.size}`, () => null);
+  function startFileCheck() {
+    stopFileCheck();
+    const setting = userCfg('signIn.tokenFile', '');
+    if (!setting || s.running || s.starting || userOut()) return;
+    const check = fileCheck = { timer: null, sig: undefined, file: expand(setting) };
+    const arm = () => { if (fileCheck === check) check.timer = timers.set(tick, FILE_CHECK_MS); };
+    const tick = async () => {
+      check.timer = null;
+      const sig = await sigOf(check.file);
+      if (fileCheck !== check) return;
+      if (check.sig === undefined) check.sig = sig;
+      if (sig !== check.sig) { stopFileCheck(); restart().catch(log); return; }
+      arm();
+    };
+    // the baseline is the file as it is at the sign-out
+    sigOf(check.file).then((sig) => { if (fileCheck === check && check.sig === undefined) check.sig = sig; });
+    arm();
   }
 
   let watcher = null, watched = '';
@@ -500,6 +528,7 @@ function activate(context, deps = {}) {
     stopAll();
     if (watcher) watcher.dispose();
     watcher = null;
+    stopFileCheck();
     // the tabs stay: VS Code disposes the panels itself, and the serializer restores them after a reload
     tickets.dispose();
   }
