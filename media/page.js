@@ -80,6 +80,7 @@
     banner.appendChild(el('span', 'text', text));
     if (onReload) banner.appendChild(button('reload', 'Reload', onReload));
   }
+  showBanner('Loading…');   // until the host's first render (or its waiting / load-error message)
 
   // ---- the body and title, edited and saved together ----
   const edit = button('page-edit', 'Edit', () => start()); edit.disabled = true;

@@ -363,3 +363,11 @@ test('searchUsers answers reach the mention list through requestId', () => {
   x.send({ type: 'users', requestId: s.requestId, users: [{ accountId: 'acc-bo', displayName: 'Bo Sample' }] });
   assert.strictEqual(x.q('.mention-list button').textContent, 'Bo Sample');
 });
+
+test('before its content arrives, the tab says Loading…; the render clears it', () => {
+  const x = page();
+  const banner = x.q('.banner');
+  assert.strictEqual(banner.hidden, false); assert.strictEqual(banner.textContent, 'Loading…');
+  x.send(render());
+  assert.strictEqual(banner.hidden, true);
+});

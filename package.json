@@ -2,7 +2,7 @@
   "name": "jay",
   "displayName": "jay",
   "description": "Jira and Confluence in a sidebar of its own: your epics and tickets by quarter, and your Confluence pages, each an editor tab, with their text available to the AI agent beside them. Not affiliated with Atlassian.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "seanahn",
   "license": "MIT",
   "icon": "media/listing-icon.png",
