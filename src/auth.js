@@ -23,6 +23,8 @@ function createApiTokenAuth({ site, email, token }) {
     kind: 'apiToken',
     baseUrl: () => base,
     siteUrl: () => base,
+    wikiBaseUrl: () => base + '/wiki',
+    confluenceAccess: () => 'full',
     header: async () => 'Basic ' + Buffer.from(`${email}:${token}`).toString('base64'),
     onUnauthorized: async () => false,
     describe: () => 'API token',
@@ -112,6 +114,11 @@ function createTokenFileAuth({ file, refreshCommand, lockDir, run = runCommand, 
     kind: 'tokenFile',
     baseUrl: () => `https://api.atlassian.com/ex/jira/${read().creds.cloud_id}`,
     siteUrl: () => stripSlash(read().creds.jira_url),
+    wikiBaseUrl: () => `https://api.atlassian.com/ex/confluence/${read().creds.cloud_id}/wiki`,
+    confluenceAccess() {
+      const scopes = String(read().creds.scope || '').split(/\s+/);
+      return scopes.includes('write:page:confluence') ? 'full' : scopes.includes('read:page:confluence') ? 'read' : 'none';
+    },
     async header() {
       let c = read();
       if (!expiring(c)) accepted = false;
@@ -161,6 +168,8 @@ function createEnvFileAuth({ file }) {
     kind: 'envFile',
     baseUrl: () => read().base,
     siteUrl: () => read().base,
+    wikiBaseUrl: () => read().base + '/wiki',
+    confluenceAccess: () => 'full',
     async header() { const c = read(); used = c.token; return 'Basic ' + Buffer.from(`${c.user}:${c.token}`).toString('base64'); },
     async onUnauthorized() { return read().token !== used; },
     describe: () => 'token file',
@@ -185,6 +194,8 @@ function createFileAuth(opts) {
     get kind() { return cur.kind; },
     baseUrl: () => pick().baseUrl(),
     siteUrl: () => pick().siteUrl(),
+    wikiBaseUrl: () => pick().wikiBaseUrl(),
+    confluenceAccess: () => pick().confluenceAccess(),
     header: () => pick().header(),
     onUnauthorized: () => pick().onUnauthorized(),
     describe: () => cur.describe(),

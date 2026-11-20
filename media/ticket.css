@@ -84,3 +84,6 @@ img.ProseMirror-separator { display: inline !important; border: none !important;
 
 .jira-now { margin: 6px 0; padding: 4px 8px; border-left: 3px solid var(--vscode-inputValidation-warningBorder); background: var(--vscode-textBlockQuote-background); }
 .jira-now summary { cursor: pointer; opacity: 0.85; }
+.page-links { list-style: none; margin: 0; padding: 0; }
+.page-link { background: none; color: var(--vscode-textLink-foreground); padding: 0; }
+.page-link:hover { text-decoration: underline; background: none; }

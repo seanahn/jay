@@ -1,8 +1,8 @@
 {
   "name": "jay",
   "displayName": "jay",
-  "description": "Jira in a sidebar of its own: your epics and tickets by quarter, each ticket an editor tab, with its text available to the AI agent beside it. Not affiliated with Atlassian.",
-  "version": "0.1.7",
+  "description": "Jira and Confluence in a sidebar of its own: your epics and tickets by quarter, and your Confluence pages, each an editor tab, with their text available to the AI agent beside them. Not affiliated with Atlassian.",
+  "version": "0.2.0",
   "publisher": "seanahn",
   "license": "MIT",
   "icon": "media/listing-icon.png",
@@ -18,7 +18,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onWebviewPanel:jay.ticket"
+    "onWebviewPanel:jay.ticket",
+    "onWebviewPanel:jay.page"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -26,7 +27,7 @@
       "activitybar": [
         {
           "id": "jay",
-          "title": "Jira",
+          "title": "Jira and Confluence",
           "icon": "media/jay-icon.svg"
         }
       ]
@@ -71,6 +72,18 @@
       {
         "command": "jay.projectKeys",
         "title": "jay: Project Keys"
+      },
+      {
+        "command": "jay.openPage",
+        "title": "jay: Open Confluence Page"
+      },
+      {
+        "command": "jay.siteUrl",
+        "title": "jay: Site URL"
+      },
+      {
+        "command": "jay.activePageFile",
+        "title": "jay: Active Page File"
       }
     ],
     "menus": {
@@ -85,6 +98,18 @@
         },
         {
           "command": "jay.projectKeys",
+          "when": "false"
+        },
+        {
+          "command": "jay.openPage",
+          "when": "false"
+        },
+        {
+          "command": "jay.siteUrl",
+          "when": "false"
+        },
+        {
+          "command": "jay.activePageFile",
           "when": "false"
         }
       ],
@@ -178,6 +203,11 @@
           "type": "boolean",
           "default": true,
           "description": "Write each open ticket to ~/.jay as plain text (files readable only by you), so an AI agent beside jay knows which ticket is open. Off: no files, and jay.activeIssueFile returns nothing."
+        },
+        "jay.confluence.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Jira | Confluence switch and check Confluence for mentions."
         }
       }
     }

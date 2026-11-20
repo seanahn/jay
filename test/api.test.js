@@ -171,3 +171,8 @@ test('versions of a project, read like any other call', async () => {
   assert.strictEqual(calls[0].p, '/rest/api/3/project/DEMO/versions');
   assert.strictEqual(calls[0].o, undefined, 'a plain read: a 401 refreshes the sign-in like any other');
 });
+test('remoteLinks maps object url and title', async () => {
+  const { api, calls } = mk([[{ id: 1, object: { url: 'https://example.atlassian.net/wiki/x/AbCd', title: 'Demo Home' } }, { id: 2, object: { url: 'https://example.com/a' } }]]);
+  assert.deepStrictEqual(await api.remoteLinks('DEMO-1'), [{ url: 'https://example.atlassian.net/wiki/x/AbCd', title: 'Demo Home' }, { url: 'https://example.com/a', title: 'https://example.com/a' }]);
+  assert.strictEqual(calls[0].p, '/rest/api/3/issue/DEMO-1/remotelink');
+});

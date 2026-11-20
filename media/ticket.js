@@ -107,7 +107,8 @@
   const fields = el('section', 'fields');
   const descSec = el('section', 'description');
   const commentsSec = el('section', 'comments');
-  document.body.append(banner, header, fields, descSec, commentsSec);
+  const pagesSec = el('section', 'pages-section'); pagesSec.hidden = true;
+  document.body.append(banner, header, fields, descSec, pagesSec, commentsSec);
 
   function showBanner(text, reload) {
     clear(banner);
@@ -406,6 +407,21 @@
   handlers.set('comment', newH);
   makeNewEditor();
 
+  // ---- Confluence pages the ticket references (host sends { url, title }; text only) ----
+  function drawPages(list) {
+    clear(pagesSec);
+    pagesSec.hidden = !(list && list.length);
+    if (pagesSec.hidden) return;
+    pagesSec.appendChild(el('h2', '', 'Confluence pages'));
+    const ul = el('ul', 'page-links');
+    for (const pg of list) {
+      const li = el('li');
+      li.appendChild(button('page-link', String(pg.title || pg.url), () => post({ type: 'openPage', url: pg.url })));
+      ul.appendChild(li);
+    }
+    pagesSec.appendChild(ul);
+  }
+
   // ---- render ----
   function drawPath(path) {
     clear(pathNav);
@@ -447,6 +463,7 @@
       h.theirs.show(h.show(v));
       say(h.msg(), "Reloaded. Your draft is kept; Jira's current version is shown with it. Save to apply your draft.");
     }
+    drawPages(m.pages);
     drawComments();
     post({ type: 'getTransitions' });
   }

@@ -10,6 +10,7 @@ class Sidebar {
     this.state = {};
     this.handlers = [];
     this.badge = 0;
+    this.title = null;
   }
 
   resolveWebviewView(view) {
@@ -29,6 +30,7 @@ class Sidebar {
       else for (const fn of this.handlers) fn(m);
     });
     this.applyBadge();
+    if (this.title !== null) view.title = this.title;
     this.post();
   }
 
@@ -55,6 +57,12 @@ class Sidebar {
   applyBadge() {
     // 0 clears the badge: a { value: 0 } badge may linger on some builds
     if (this.view) this.view.badge = this.badge ? { value: this.badge, tooltip: `${this.badge} new` } : undefined;
+  }
+
+  /** The view's title (the header above the page): Jira or Confluence, after the side shown. Kept until the view resolves. */
+  setTitle(t) {
+    this.title = t;
+    if (this.view) this.view.title = t;
   }
 
   focusSearch() {

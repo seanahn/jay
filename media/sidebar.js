@@ -17,91 +17,115 @@
   const note = el('div', 'note'); note.hidden = true;
 
   const controls = el('div', 'controls');
-  // the project picker: a type-to-filter combobox (input + listbox); typed text lives in the input, which render never overwrites while it is open
-  const picker = el('div', 'picker');
-  const projectIn = el('input', 'project'); projectIn.type = 'text'; projectIn.placeholder = 'Pick a project'; projectIn.autocomplete = 'off';
-  projectIn.setAttribute('role', 'combobox'); projectIn.setAttribute('aria-label', 'Project'); projectIn.setAttribute('aria-expanded', 'false');
-  projectIn.setAttribute('aria-controls', 'project-list'); projectIn.setAttribute('aria-autocomplete', 'list');
-  const projectList = el('div', 'project-list'); projectList.id = 'project-list'; projectList.setAttribute('role', 'listbox'); projectList.setAttribute('aria-label', 'Projects'); projectList.hidden = true;
-  picker.append(projectIn, projectList);
+  const PICK_MAX = 50;
+  // a type-to-filter combobox (input + listbox), Recent first; typed text lives in the input, which a refresh never overwrites while it is open.
+  // o: { noun, nouns, label, placeholder, items() -> [{ key, name }], recent() -> [key], current() -> key, choose(key) }
+  function combobox(o) {
+    const wrap = el('div', 'picker');
+    const input = el('input', o.noun); input.type = 'text'; input.placeholder = o.placeholder; input.autocomplete = 'off';
+    input.setAttribute('role', 'combobox'); input.setAttribute('aria-label', o.label); input.setAttribute('aria-expanded', 'false');
+    input.setAttribute('aria-controls', o.noun + '-list'); input.setAttribute('aria-autocomplete', 'list');
+    const list = el('div', o.noun + '-list'); list.id = o.noun + '-list'; list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', o.nouns[0].toUpperCase() + o.nouns.slice(1)); list.hidden = true;
+    wrap.append(input, list);
+    let open = false, text = '', hi = null, keys = [];   // text: the filter ('' on a fresh focus); hi: the highlighted key
+    const labelOf = (p) => (p.name ? `${p.key} — ${p.name}` : p.key);
+    const currentLabel = () => { const k = o.current(), p = (o.items() || []).find((x) => x.key === k); return p ? labelOf(p) : k || ''; };
+    function matches() {
+      const all = (o.items() || []).slice().sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+      const q = text.trim().toLowerCase();
+      if (!q) {
+        const recent = [];
+        for (const k of o.recent() || []) { const p = all.find((x) => x.key === k); if (p && !recent.includes(p)) recent.push(p); }
+        return { recent, rest: all.filter((p) => !recent.includes(p)) };
+      }
+      const byKey = all.filter((p) => p.key.toLowerCase().startsWith(q));
+      return { recent: [], rest: [...byKey, ...all.filter((p) => !byKey.includes(p) && String(p.name || '').toLowerCase().includes(q))] };
+    }
+    const info = (cls, t) => { const e = el('div', cls, t); e.setAttribute('role', 'presentation'); return e; };
+    function paintList() {
+      input.setAttribute('aria-expanded', String(open)); list.hidden = !open;
+      if (!open) { list.replaceChildren(); keys = []; input.removeAttribute('aria-activedescendant'); return; }
+      const { recent, rest } = matches();
+      const total = recent.length + rest.length;
+      const shownRecent = recent.slice(0, PICK_MAX), shownRest = rest.slice(0, PICK_MAX - shownRecent.length);
+      keys = [...shownRecent, ...shownRest].map((p) => p.key);
+      if (!keys.includes(hi)) hi = keys.length ? keys[0] : null;
+      const opt = (p) => {
+        const e = el('div', 'option', labelOf(p)); e.id = o.noun + '-opt-' + p.key; e.dataset.key = p.key; e.setAttribute('role', 'option');
+        e.setAttribute('aria-selected', String(p.key === hi)); if (p.key === hi) e.classList.add('active');
+        return e;
+      };
+      const out = [];
+      if (shownRecent.length) { out.push(info('section', 'Recent')); out.push(...shownRecent.map(opt)); }
+      if (shownRecent.length && shownRest.length) out.push(info('section', 'All ' + o.nouns));
+      out.push(...shownRest.map(opt));
+      if (!keys.length) out.push(info('empty', 'No matching ' + o.nouns));
+      if (total > shownRecent.length + shownRest.length) out.push(info('empty more', 'Type to narrow the list'));
+      list.replaceChildren(...out);
+      if (hi) input.setAttribute('aria-activedescendant', o.noun + '-opt-' + hi); else input.removeAttribute('aria-activedescendant');
+    }
+    function close() { open = false; text = ''; input.value = currentLabel(); paintList(); }
+    function choose(key) {
+      if (!key) return;
+      open = false; text = ''; const p = (o.items() || []).find((x) => x.key === key); input.value = p ? labelOf(p) : key; paintList();
+      o.choose(key);
+    }
+    input.addEventListener('focus', () => { open = true; text = ''; hi = null; input.select(); paintList(); });
+    input.addEventListener('input', () => { open = true; text = input.value; hi = null; paintList(); });
+    input.addEventListener('blur', () => { if (open) close(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!open) { open = true; text = ''; hi = null; paintList(); return; }   // reopening shows row 1 without moving
+        if (!keys.length) return;
+        const i = keys.indexOf(hi), n = e.key === 'ArrowDown' ? Math.min(i + 1, keys.length - 1) : Math.max(i - 1, 0);
+        hi = keys[n]; paintList();
+        const a = list.querySelector('.option.active'); if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' && open) { e.preventDefault(); choose(hi); }
+    });
+    list.addEventListener('mousedown', (e) => e.preventDefault());   // keep focus in the box so a click is not preceded by a blur
+    list.addEventListener('click', (e) => { const t = e.target.closest && e.target.closest('.option'); if (t) choose(t.dataset.key); });
+    // refresh from state: while open, only the options refresh; the typed text stays
+    return { el: wrap, input, refresh() { if (!open) input.value = currentLabel(); else paintList(); } };
+  }
+
+  // the project picker
+  const projectBox = combobox({ noun: 'project', nouns: 'projects', label: 'Project', placeholder: 'Pick a project', items: () => state.projects, recent: () => state.recentProjects,
+    current: () => state.project, choose: (key) => post({ type: 'setProject', key }) });
   // the period picker: quarters, sprints or fix versions (state.quarters / state.quarter hold its choices and value)
   const quarterSel = el('select', 'quarter'); quarterSel.setAttribute('aria-label', 'Quarter');
   quarterSel.addEventListener('change', () => post({ type: 'setPeriod', id: quarterSel.value }));
   const periodNote = el('div', 'period-note'); periodNote.hidden = true;
   const PERIOD_LABELS = { quarter: 'Quarter', sprint: 'Sprint', fixVersion: 'Fix version' };
   const searchBox = el('input', 'search'); searchBox.type = 'text'; searchBox.placeholder = 'Search key or title'; searchBox.setAttribute('aria-label', 'Search key or title');
-  controls.append(searchBox, picker, quarterSel, periodNote);
+  controls.append(searchBox, projectBox.el, quarterSel, periodNote);
 
   const tree = el('div', 'tree'); tree.setAttribute('role', 'tree');
   d.body.append(account, error, signin, note, controls, tree);
 
-  // Jira-wide search: asked after 3+ chars and a 400 ms pause; only the answer to the latest request is shown
+  // site-wide search (Jira's and Confluence's): asked after 3+ chars and a 400 ms pause; only the answer to the latest request is shown
   const SEARCH_MIN = 3, SEARCH_MS = 400;
-  let reqId = 0, timer = null, found = null;   // found: { items } or { error } for id === reqId
+  function searcher(box, type, failText, skip) {
+    const s = { found: null, reqId: 0, timer: null };   // found: { items } or { error } for id === reqId
+    s.input = () => {
+      if (s.timer !== null) { clearTimeout(s.timer); s.timer = null; }
+      const q = box.value.trim();
+      if (q.length < SEARCH_MIN || (skip && skip(q))) { s.reqId++; s.found = null; return; }   // bumping the id drops any answer still on its way
+      s.timer = setTimeout(() => { s.timer = null; s.found = null; post({ type, id: ++s.reqId, query: q }); paint(); }, SEARCH_MS);
+    };
+    s.answer = (m) => {
+      if (m.id !== s.reqId) return;
+      s.found = m.error ? { error: failText } : { items: Array.isArray(m.items) ? m.items : [] };
+      paint();
+    };
+    return s;
+  }
+  const jiraSearch = searcher(searchBox, 'search', 'Jira search failed');
 
   const query = () => searchBox.value.trim().toLowerCase();
   // a copy of KEY_RE in src/ticket.js (the page loads nothing from the host): keep the two the same
   const KEY_RE = /^[A-Z][A-Z0-9_]+-\d+$/;
-
-  const PICK_MAX = 50;
-  let pickOpen = false, pickText = '', pickHi = null, pickKeys = [];   // pickText: the filter ('' on a fresh focus); pickHi: the highlighted key
-  const projectLabel = (p) => (p.name ? `${p.key} — ${p.name}` : p.key);
-  const currentLabel = () => { const p = (state.projects || []).find((x) => x.key === state.project); return p ? projectLabel(p) : state.project || ''; };
-  function pickMatches() {
-    const all = (state.projects || []).slice().sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-    const q = pickText.trim().toLowerCase();
-    if (!q) {
-      const recent = [];
-      for (const k of state.recentProjects || []) { const p = all.find((x) => x.key === k); if (p && !recent.includes(p)) recent.push(p); }
-      return { recent, rest: all.filter((p) => !recent.includes(p)) };
-    }
-    const byKey = all.filter((p) => p.key.toLowerCase().startsWith(q));
-    return { recent: [], rest: [...byKey, ...all.filter((p) => !byKey.includes(p) && String(p.name || '').toLowerCase().includes(q))] };
-  }
-  function renderPick() {
-    projectIn.setAttribute('aria-expanded', String(pickOpen)); projectList.hidden = !pickOpen;
-    if (!pickOpen) { projectList.replaceChildren(); pickKeys = []; projectIn.removeAttribute('aria-activedescendant'); return; }
-    const { recent, rest } = pickMatches();
-    const total = recent.length + rest.length;
-    const shownRecent = recent.slice(0, PICK_MAX), shownRest = rest.slice(0, PICK_MAX - shownRecent.length);
-    pickKeys = [...shownRecent, ...shownRest].map((p) => p.key);
-    if (!pickKeys.includes(pickHi)) pickHi = pickKeys.length ? pickKeys[0] : null;
-    const opt = (p) => {
-      const o = el('div', 'option', projectLabel(p)); o.id = 'project-opt-' + p.key; o.dataset.key = p.key; o.setAttribute('role', 'option');
-      o.setAttribute('aria-selected', String(p.key === pickHi)); if (p.key === pickHi) o.classList.add('active');
-      return o;
-    };
-    const out = [];
-    if (shownRecent.length) { const h = el('div', 'section', 'Recent'); h.setAttribute('role', 'presentation'); out.push(h); out.push(...shownRecent.map(opt)); }
-    if (shownRecent.length && shownRest.length) { const h = el('div', 'section', 'All projects'); h.setAttribute('role', 'presentation'); out.push(h); }
-    out.push(...shownRest.map(opt));
-    if (!pickKeys.length) { const e = el('div', 'empty', 'No matching projects'); e.setAttribute('role', 'presentation'); out.push(e); }
-    if (total > shownRecent.length + shownRest.length) { const e = el('div', 'empty more', 'Type to narrow the list'); e.setAttribute('role', 'presentation'); out.push(e); }
-    projectList.replaceChildren(...out);
-    if (pickHi) projectIn.setAttribute('aria-activedescendant', 'project-opt-' + pickHi); else projectIn.removeAttribute('aria-activedescendant');
-  }
-  function pickClose() { pickOpen = false; pickText = ''; projectIn.value = currentLabel(); renderPick(); }
-  function pickChoose(key) {
-    if (!key) return;
-    pickOpen = false; pickText = ''; const p = (state.projects || []).find((x) => x.key === key); projectIn.value = p ? projectLabel(p) : key; renderPick();
-    post({ type: 'setProject', key });
-  }
-  projectIn.addEventListener('focus', () => { pickOpen = true; pickText = ''; pickHi = null; projectIn.select(); renderPick(); });
-  projectIn.addEventListener('input', () => { pickOpen = true; pickText = projectIn.value; pickHi = null; renderPick(); });
-  projectIn.addEventListener('blur', () => { if (pickOpen) pickClose(); });
-  projectIn.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); pickClose(); return; }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (!pickOpen) { pickOpen = true; pickText = ''; pickHi = null; renderPick(); return; }   // reopening shows row 1 without moving
-      if (!pickKeys.length) return;
-      const i = pickKeys.indexOf(pickHi), n = e.key === 'ArrowDown' ? Math.min(i + 1, pickKeys.length - 1) : Math.max(i - 1, 0);
-      pickHi = pickKeys[n]; renderPick();
-      const o = projectList.querySelector('.option.active'); if (o && o.scrollIntoView) o.scrollIntoView({ block: 'nearest' });
-    } else if (e.key === 'Enter' && pickOpen) { e.preventDefault(); pickChoose(pickHi); }
-  });
-  projectList.addEventListener('mousedown', (e) => e.preventDefault());   // keep focus in the box so a click is not preceded by a blur
-  projectList.addEventListener('click', (e) => { const o = e.target.closest && e.target.closest('.option'); if (o) pickChoose(o.dataset.key); });
 
   function fill(sel, items, value, blank) {
     const opts = items.map((x) => { const o = el('option', '', x.label); o.value = x.value; return o; });
@@ -205,7 +229,7 @@
     note.hidden = !state.note; note.textContent = state.note || '';
     controls.hidden = out; tree.hidden = out;
     if (out) { tree.replaceChildren(); return; }
-    if (!pickOpen) projectIn.value = currentLabel(); else renderPick();   // while open, only the options refresh; the typed text stays
+    projectBox.refresh();
     fill(quarterSel, (state.quarters || []).map((x) => ({ value: x.id, label: x.label })), state.quarter);
     quarterSel.setAttribute('aria-label', PERIOD_LABELS[state.periodKind] || 'Quarter');
     periodNote.hidden = !state.periodNote; periodNote.textContent = state.periodNote || '';
@@ -228,6 +252,7 @@
         const r = el('div', 'row open-key', `Open ${asKey}`); r.dataset.open = asKey; rows.unshift(r);
       }
     }
+    const found = jiraSearch.found;
     if (found) {
       rows.push(el('div', 'section', 'Jira results'));
       if (found.error) rows.push(el('div', 'empty', found.error));
@@ -239,13 +264,6 @@
       }
     }
     tree.replaceChildren(...rows);
-  }
-
-  function onSearchInput() {
-    if (timer !== null) { clearTimeout(timer); timer = null; }
-    const q = searchBox.value.trim();
-    if (q.length < SEARCH_MIN) { reqId++; found = null; return; }   // bumping the id drops any answer still on its way
-    timer = setTimeout(() => { timer = null; found = null; post({ type: 'search', id: ++reqId, query: q }); render(); }, SEARCH_MS);
   }
 
   tree.addEventListener('click', (e) => {
@@ -266,17 +284,173 @@
     return null;
   }
 
-  searchBox.addEventListener('input', () => { onSearchInput(); render(); });
-  d.addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target === searchBox) { searchBox.value = ''; onSearchInput(); render(); } });
+  searchBox.addEventListener('input', () => { jiraSearch.input(); render(); });
+  d.addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target === searchBox) { searchBox.value = ''; jiraSearch.input(); render(); } });
 
   window.addEventListener('message', (e) => {
     const m = e.data || {};
-    if (m.type === 'state') { state = m; render(); }
-    else if (m.type === 'searchResults') {
-      if (m.id !== reqId) return;
-      found = m.error ? { error: 'Jira search failed' } : { items: Array.isArray(m.items) ? m.items : [] };
-      render();
-    } else if (m.type === 'focusSearch') searchBox.focus();
+    if (m.type === 'state') { state = m; paint(); }
+    else if (m.type === 'searchResults') jiraSearch.answer(m);
+    else if (m.type === 'confSearchResults') confSearch.answer(m);
+    else if (m.type === 'focusSearch') (shownSide === 'confluence' ? confSearchBox : searchBox).focus();
   });
+  // ---- the Confluence side (notes/102 "The sidebar"): the switch, then account, search, space box, Mentions, My pages and the page tree
+  if (!saved.confExpanded) saved.confExpanded = {};
+  const sideSwitch = el('div', 'side-switch'); sideSwitch.setAttribute('role', 'group'); sideSwitch.setAttribute('aria-label', 'Jira or Confluence');
+  let shownSide = 'jira';
+  const sideBtn = (side, label) => {
+    const b = el('button', 'side-' + side, label); b.type = 'button';
+    b.addEventListener('click', () => { if (shownSide !== side) post({ type: 'setSide', side }); });
+    return b;
+  };
+  const jiraBtn = sideBtn('jira', 'Jira'), confBtn = sideBtn('confluence', 'Confluence');
+  sideSwitch.append(jiraBtn, confBtn);
+  const conf = () => state.conf || {};
+  const confControls = el('div', 'controls conf-controls');
+  const confSearchBox = el('input', 'search conf-search'); confSearchBox.type = 'text'; confSearchBox.placeholder = 'Search pages'; confSearchBox.setAttribute('aria-label', 'Search pages');
+  const spaceBox = combobox({ noun: 'space', nouns: 'spaces', label: 'Space', placeholder: 'Pick a space', items: () => conf().spaces, recent: () => conf().recentSpaces,
+    current: () => (conf().space ? conf().space.key : null), choose: (key) => post({ type: 'setSpace', key }) });
+  confControls.append(confSearchBox, spaceBox.el);
+  const confTree = el('div', 'tree conf-tree'); confTree.setAttribute('role', 'tree');
+  // a page URL or short link: the host checks it against the site (parsePageUrl); this only decides whether to offer "Open this page"
+  const PAGE_URL_RE = /^https:\/\/[^\s/]+\/wiki\/(spaces\/[^/\s]+\/pages\/|pages\/viewpage\.action\?|x\/)\S*$/i;
+  const confSearch = searcher(confSearchBox, 'confSearch', 'Confluence search failed', (q) => PAGE_URL_RE.test(q));
+  const asked = new Set();   // ids whose children were asked for from this page
+
+  const citems = () => conf().items || {};
+  const kidsOf = (it) => (it.children || []).map((id) => citems()[id]).filter(Boolean);
+  const expandable = (it) => !it.childrenLoaded || (it.children || []).length > 0;
+  const confOpen = (it) => !!saved.confExpanded[it.id] && (it.childrenLoaded || asked.has(it.id));
+  const cHas = (it, q) => String(it.title).toLowerCase().includes(q) || kidsOf(it).some((k) => cHas(k, q));
+  function pathOf(it) {
+    const t = []; let p = citems()[it.parentId];
+    while (p && t.length < 50) { t.unshift(String(p.title)); p = citems()[p.parentId]; }
+    return t;
+  }
+  function pageRow(cls, id, title, extra, tip) {
+    const r = el('div', 'row ' + cls); r.dataset.id = id; r.setAttribute('role', 'treeitem'); r.setAttribute('title', tip);
+    r.append(el('span', 'twisty', ''), el('span', 'col-title', String(title)));
+    if (extra !== undefined) r.append(el('span', 'col-space', String(extra)));
+    return r;
+  }
+  const moreRow = (key, depth) => { const r = el('div', 'row more depth' + Math.min(depth, 2), 'More'); r.dataset.more = key; return r; };
+  const quiet = (t) => el('div', 'empty', t);
+  function sectionHead(name, label, open) {
+    const h = el('div', 'section toggle'); h.dataset.section = name; h.setAttribute('role', 'button'); h.tabIndex = 0; h.setAttribute('aria-expanded', String(open));
+    h.append(el('span', 'twisty', open ? '⌄' : '›'), d.createTextNode(label));
+    return h;
+  }
+  function confWalk(ids, depth, q, out) {
+    for (const id of ids || []) {
+      const it = citems()[id];
+      if (!it || (q && !cHas(it, q))) continue;
+      const r = pageRow('page depth' + Math.min(depth, 2), it.id, it.title, undefined, [...pathOf(it), String(it.title)].join(' › ') + (it.kind && it.kind !== 'page' ? '\n' + it.kind : ''));
+      r.dataset.kind = String(it.kind || '');
+      const open = expandable(it) && ((!!q && kidsOf(it).some((k) => cHas(k, q))) || confOpen(it));
+      if (expandable(it)) { const tw = r.querySelector('.twisty'); tw.textContent = open ? '⌄' : '›'; tw.dataset.toggle = it.id; }
+      out.push(r);
+      if (!open) continue;
+      if (!it.childrenLoaded) { out.push(quiet('Loading…')); continue; }
+      confWalk(it.children, depth + 1, q, out);
+      if (it.hasMore && !q) out.push(moreRow(it.id, depth + 1));
+    }
+  }
+  const when = (at) => { const t = at ? new Date(at) : null; return t && !isNaN(t) ? t.toLocaleString() : ''; };
+
+  function renderConfluence() {
+    const c = conf(), out = !state.signedIn;
+    account.hidden = out || !c.account; account.textContent = out ? '' : c.account || '';
+    error.hidden = !state.error; error.textContent = state.error || '';
+    signin.hidden = !out;
+    note.hidden = !c.note; note.textContent = c.note || '';
+    controls.hidden = true; tree.hidden = true;
+    confControls.hidden = out; confTree.hidden = out;
+    if (out) { confTree.replaceChildren(); return; }
+    spaceBox.refresh();
+    const raw = confSearchBox.value.trim(), isUrl = PAGE_URL_RE.test(raw), q = isUrl ? '' : raw.toLowerCase();
+    const rows = [];
+    if (isUrl) { const r = el('div', 'row open-url', 'Open this page'); r.dataset.url = raw; rows.push(r); }
+    const mentions = Array.isArray(c.mentions) ? c.mentions : [];
+    if (mentions.length) {
+      rows.push(el('div', 'section', 'Mentions'));
+      for (const m of mentions) {
+        const r = el('div', 'row mention pulse'); r.dataset.mention = m.id;
+        r.setAttribute('title', [String(m.title), 'Mentioned by ' + String(m.byName || 'someone'), when(m.at)].filter(Boolean).join('\n'));
+        r.append(el('span', 'twisty', ''), el('span', 'col-title', String(m.title)), el('span', 'col-by', String(m.byName || '')));
+        rows.push(r);
+      }
+    }
+    const open = c.open || { mine: false, tree: true }, mine = c.mine || { items: [] }, loading = c.loading || {};
+    rows.push(sectionHead('mine', 'My pages', !!open.mine));
+    if (open.mine) {
+      for (const x of mine.items || []) rows.push(pageRow('my-page', x.id, x.title, x.spaceKey, String(x.title) + '\nSpace: ' + String(x.spaceKey)));
+      if (!(mine.items || []).length) rows.push(quiet(loading.mine ? 'Loading…' : 'Nothing here'));
+      else if (mine.hasMore) rows.push(moreRow('mine', 0));
+    }
+    if (!c.space) rows.push(quiet('Pick a space'));
+    else {
+      rows.push(sectionHead('tree', String(c.space.name || c.space.key), open.tree !== false));
+      if (open.tree !== false) {
+        const sub = [];
+        confWalk(c.roots, 0, q, sub);
+        if (c.rootsHasMore && !q) sub.push(moreRow('root', 0));
+        rows.push(...sub);
+        if (!sub.length) rows.push(quiet(q ? 'No matches' : loading.tree ? 'Loading…' : 'Nothing here'));
+      }
+    }
+    const found = confSearch.found;
+    if (found) {
+      rows.push(el('div', 'section', 'Confluence results'));
+      if (found.error) rows.push(quiet(found.error));
+      else {
+        const shown = new Set(rows.filter((r) => r.dataset.id).map((r) => r.dataset.id));
+        const extra = found.items.filter((i) => !shown.has(String(i.id)));
+        if (!extra.length) rows.push(quiet('No other matches'));
+        for (const i of extra) rows.push(pageRow('result', i.id, i.title, i.spaceKey, String(i.title) + '\nSpace: ' + String(i.spaceKey)));
+      }
+    }
+    confTree.replaceChildren(...rows);
+  }
+
+  function toggleConf(id) {
+    const it = citems()[id];
+    if (!it || !expandable(it)) return;
+    const open = confOpen(it);
+    if (!open && !it.childrenLoaded && !asked.has(it.id)) { asked.add(it.id); post({ type: 'expandPage', id: it.id }); }
+    if (open && !it.childrenLoaded) asked.delete(it.id);   // collapsed before its children came: reopening asks again
+    saved.confExpanded[it.id] = !open; vscode.setState(saved); paint();
+  }
+  confTree.addEventListener('click', (e) => {
+    const t = e.target;
+    const head = t.closest && t.closest('.section.toggle');
+    if (head) { post({ type: 'toggleSection', name: head.dataset.section }); return; }
+    if (t.dataset && t.dataset.toggle) { toggleConf(t.dataset.toggle); return; }
+    const r = t.closest && t.closest('.row');
+    if (!r) return;
+    if (r.dataset.url) post({ type: 'openPage', url: r.dataset.url });
+    else if (r.dataset.mention) post({ type: 'openMention', id: r.dataset.mention });
+    else if (r.dataset.more === 'mine') post({ type: 'moreMine' });
+    else if (r.dataset.more) post({ type: 'morePages', id: r.dataset.more === 'root' ? null : r.dataset.more });
+    else if (r.dataset.kind === 'folder') toggleConf(r.dataset.id);   // folders have no tab
+    else if (r.dataset.id) post({ type: 'openPage', id: r.dataset.id });
+  });
+  confTree.addEventListener('keydown', (e) => {
+    const head = e.target.closest && e.target.closest('.section.toggle');
+    if (head && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); post({ type: 'toggleSection', name: head.dataset.section }); }
+  });
+  confSearchBox.addEventListener('input', () => { confSearch.input(); paint(); });
+  confSearchBox.addEventListener('keydown', (e) => { if (e.key === 'Escape') { confSearchBox.value = ''; confSearch.input(); paint(); } });
+
+  // Confluence off: always Jira, no switch, and the Confluence parts are not in the page at all
+  function paint() {
+    const on = !!state.confluenceEnabled;
+    shownSide = on && state.side === 'confluence' ? 'confluence' : 'jira';
+    if (on) {
+      if (sideSwitch.parentNode !== d.body) d.body.prepend(sideSwitch);
+      jiraBtn.setAttribute('aria-pressed', String(shownSide === 'jira')); confBtn.setAttribute('aria-pressed', String(shownSide === 'confluence'));
+    } else sideSwitch.remove();
+    if (shownSide === 'confluence') { if (confTree.parentNode !== d.body) d.body.append(confControls, confTree); renderConfluence(); }
+    else { confControls.remove(); confTree.remove(); render(); }
+  }
   post({ type: 'ready' });
 })();

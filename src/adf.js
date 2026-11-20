@@ -50,6 +50,7 @@ function mentionsOf(adf) {
 const kids = (n) => n.content || [];
 const indent = (s, pad) => s.split('\n').map((l) => (l ? pad + l : l)).join('\n');
 
+const macro = (a) => `[macro: ${a.extensionKey || ''}]`;
 function inline(n) {
   const a = n.attrs || {};
   switch (n.type) {
@@ -65,6 +66,7 @@ function inline(n) {
       return a.timestamp == null || a.timestamp === '' || Number.isNaN(d.getTime()) ? '[date]' : d.toISOString().slice(0, 10);
     }
     case 'status': return a.text || '';
+    case 'inlineExtension': return macro(a);
     default: return `[${n.type}]`;
   }
 }
@@ -89,6 +91,7 @@ function block(n) {
     case 'codeBlock': return indent(inlines(n), '    ');
     case 'blockquote': return indent(kids(n).map(block).join('\n'), '> ');
     case 'rule': return '---';
+    case 'extension': case 'bodiedExtension': return macro(a);
     case 'table': return '[table]';
     case 'panel': return `[panel: ${kids(n).map(block).join('\n').split('\n')[0]}]`;
     case 'expand': return `[expand: ${a.title || ''}]`;

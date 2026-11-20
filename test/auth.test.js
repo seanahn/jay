@@ -189,3 +189,24 @@ test('env file: the token never appears in an error', async () => {
   const s = envSetup('JIRA_URL=https://example.atlassian.net\nJIRA_API_TOKEN=SECRETTOK\n'); const a = mkf(s);
   await assert.rejects(a.header(), (e) => { assert.ok(!String(e).includes('SECRETTOK') && !(e.stack || '').includes('SECRETTOK') && !e.reason.includes('SECRETTOK')); return true; });
 });
+
+test('wikiBaseUrl per sign-in kind', () => {
+  assert.strictEqual(createApiTokenAuth({ site: 'https://example.atlassian.net/', email: 'a@example.com', token: 't' }).wikiBaseUrl(), 'https://example.atlassian.net/wiki');
+  assert.strictEqual(mk(setup(fresh())).wikiBaseUrl(), 'https://api.atlassian.com/ex/confluence/cloud-1/wiki');
+  assert.strictEqual(mkf(envSetup(WRAPPER('tok'))).wikiBaseUrl(), 'https://example.atlassian.net/wiki');
+  assert.strictEqual(mkf(setup(fresh())).wikiBaseUrl(), 'https://api.atlassian.com/ex/confluence/cloud-1/wiki');
+});
+test('confluenceAccess reads the token file scope', () => {
+  const withScope = (scope) => {
+    const s = setup(fresh()); const c = JSON.parse(fs.readFileSync(s.file, 'utf8'));
+    if (scope !== undefined) c.scope = scope;
+    fs.writeFileSync(s.file, JSON.stringify(c)); return mk(s);
+  };
+  assert.strictEqual(withScope(undefined).confluenceAccess(), 'none');
+  assert.strictEqual(withScope('read:jira-work').confluenceAccess(), 'none');
+  assert.strictEqual(withScope('read:jira-work read:page:confluence').confluenceAccess(), 'read');
+  assert.strictEqual(withScope('read:jira-work read:page:confluence write:page:confluence').confluenceAccess(), 'full');
+  assert.strictEqual(createApiTokenAuth({ site: 'https://example.atlassian.net', email: 'a@example.com', token: 't' }).confluenceAccess(), 'full');
+  assert.strictEqual(mkf(envSetup(WRAPPER('tok'))).confluenceAccess(), 'full');
+  assert.strictEqual(mkf(setup(fresh())).confluenceAccess(), 'none');
+});

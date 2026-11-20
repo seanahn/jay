@@ -104,6 +104,7 @@ function createApi(http, auth) {
     async transition(key, id) { await http.send('POST', `${issuePath(key)}/transitions`, { transition: { id } }); },
     async addComment(key, adf) { return commentOf(await http.send('POST', `${issuePath(key)}/comment`, { body: adf })); },
     async editComment(key, id, adf) { return commentOf(await http.send('PUT', `${issuePath(key)}/comment/${encodeURIComponent(id)}`, { body: adf })); },
+    async remoteLinks(key) { return ((await http.get(`${issuePath(key)}/remotelink`)) || []).map((l) => ({ url: l.object.url, title: l.object.title || l.object.url })); },
     browseUrl: (key) => auth.siteUrl() + '/browse/' + key,
   };
 }

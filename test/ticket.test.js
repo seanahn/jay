@@ -19,7 +19,7 @@ const iss = (key, o = {}) => ({
 });
 const settle = () => new Promise((r) => setTimeout(r, 15));
 
-function fakeApi(issues) {
+function fakeApi(issues, opts = {}) {
   const calls = [];
   const rec = (name, fn) => async (...args) => { calls.push([name, ...args]); return fn(...args); };
   const api = {
@@ -32,6 +32,7 @@ function fakeApi(issues) {
     // for the real writer: fields read from and written to the scripted issues
     field: rec('field', (k, name) => issues.get(k)[name]),
     setFields: rec('setFields', (k, fields) => { issues.set(k, Object.assign({}, issues.get(k), fields, { updated: new Date().toISOString() })); }),
+    remoteLinks: rec('remoteLinks', () => { if (opts.remoteFail) throw new Error('remote links down'); return opts.remote || []; }),
     browseUrl,
   };
   return { api, calls, count: (n) => calls.filter((c) => c[0] === n).length };
@@ -45,14 +46,14 @@ function fakeWriter(result = { ok: true, value: null }) {
 }
 function fakeEvents() { const log = []; return { log, seen: (k) => log.push(['seen', k]), save: () => log.push(['save']) }; }
 
-function setup({ issues = [iss('DEMO-1')], index = new Map(), writerResult, realWriter = false } = {}) {
+function setup({ issues = [iss('DEMO-1')], index = new Map(), writerResult, realWriter = false, api = {}, extra = {} } = {}) {
   ui.panels.length = 0; ui.focused = true; ui.opened.length = 0;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jay-ticket-'));
   const map = new Map(issues.map((i) => [i.key, i]));
-  const f = fakeApi(map); const w = fakeWriter(writerResult); const events = fakeEvents();
+  const f = fakeApi(map, api); const w = fakeWriter(writerResult); const events = fakeEvents();
   if (realWriter) w.writer = createWriter({ api: f.api, meId: ME.accountId });
   const mirror = createMirror({ dir, browseUrl });
-  const tickets = createTickets({ vscode, api: f.api, writer: w.writer, mirror, events, getIndex: () => index, me: ME, extensionUri: vscode.Uri.file('/ext'), isFocused: () => ui.focused });
+  const tickets = createTickets({ vscode, api: f.api, writer: w.writer, mirror, events, getIndex: () => index, me: ME, extensionUri: vscode.Uri.file('/ext'), isFocused: () => ui.focused, ...extra });
   return { dir, map, f, w, events, mirror, tickets, current: () => { try { return fs.readFileSync(path.join(dir, 'current.jira'), 'utf8'); } catch (_) { return null; } } };
 }
 async function opened(s, key = 'DEMO-1') {
@@ -334,4 +335,87 @@ test('one ticket key pattern: exported by ticket.js, used by the host, copied in
   const n = ui.panels.length;
   panel.webview._receive({ type: 'open', key: 'A-1' }); await settle();
   assert.strictEqual(ui.panels.length, n);
+});
+
+// ---- Confluence pages (design 102, "In Jira tickets") ----
+const SITE = 'https://example.atlassian.net';
+const pageUrl = (id, space = 'DEMO') => `${SITE}/wiki/spaces/${space}/pages/${id}/Title`;
+const card = (url) => ({ type: 'inlineCard', attrs: { url } });
+function confSetup(o = {}) {
+  const reads = [];   // one entry per titles() call: the ids asked for
+  const logged = [];
+  const confluence = { titles: async (ids) => {
+    reads.push(ids);
+    if (o.titlesError) throw o.titlesError;
+    if (o.pageFail) throw new Error('titles down');
+    return new Map(ids.filter((id) => !(o.missing || []).includes(id)).map((id) => [id, `Page ${id}`]));
+  } };
+  const opened = [];
+  const s = setup({
+    issues: [iss('DEMO-1', { description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [card(pageUrl('1001')), card(`${SITE}/wiki/spaces/DEMO/blog/2026/11/20/3003/Post`)] }] } })],
+    api: { remote: o.remote || [{ url: pageUrl('1002'), title: 'Linked Two' }, { url: pageUrl('1001'), title: 'Dup One' }, { url: 'https://other.example.com/x', title: 'Elsewhere' }], remoteFail: o.remoteFail },
+    extra: { confluence: o.noConf ? null : confluence, siteUrl: () => SITE, openPage: async (u) => { opened.push(u); return o.openResult !== false; }, log: (e) => logged.push(e) },
+  });
+  return { ...s, reads, opened, logged };
+}
+
+test('pages: description links first, then remote links, deduped by page id; blog posts and other sites are not listed', async () => {
+  const s = confSetup();
+  const panel = await opened(s);
+  const pages = posted(panel, 'render').pop().pages;
+  assert.deepStrictEqual(pages, [{ url: pageUrl('1001'), title: 'Dup One' }, { url: pageUrl('1002'), title: 'Linked Two' }],
+    "a remote link's title is kept even when the description links the same page first");
+  assert.deepStrictEqual(s.reads, [], 'every page has a remote-link title: no Confluence read');
+  const text = fs.readFileSync(s.mirror.pathFor('DEMO-1'), 'utf8');
+  assert.match(text, new RegExp(`## Confluence pages\\n- Dup One — ${pageUrl('1001')}\\n- Linked Two — ${pageUrl('1002')}\\n`));
+});
+
+test('pages: with Confluence unavailable the title is the URL; a remote-link failure still loads the ticket', async () => {
+  const s = confSetup({ pageFail: true, remoteFail: true });
+  const panel = await opened(s);
+  const r = posted(panel, 'render').pop();
+  assert.deepStrictEqual(r.pages, [{ url: pageUrl('1001'), title: pageUrl('1001') }]);
+  assert.strictEqual(posted(panel, 'loadError').length, 0);
+  assert.strictEqual(s.logged.filter((e) => /titles down/.test(e.message)).length, 1, 'a failed title read is one log line');
+});
+
+test("pages: while Confluence isn't ready (confluenceWait) the titles are the URLs and nothing is logged", async () => {
+  const wait = Object.assign(new Error('sign-in needed: confluenceWait'), { name: 'SignInNeeded', reason: 'confluenceWait' });
+  const s = confSetup({ titlesError: wait, remote: [] });
+  const panel = await opened(s);
+  assert.deepStrictEqual(posted(panel, 'render').pop().pages, [{ url: pageUrl('1001'), title: pageUrl('1001') }]);
+  assert.strictEqual(s.reads.length, 1);
+  assert.deepStrictEqual(s.logged, []);
+});
+
+test('pages: without confluence options a ticket has no pages and no remote-link call', async () => {
+  const s = setup();
+  const panel = await opened(s);
+  assert.deepStrictEqual(posted(panel, 'render').pop().pages, []);
+  assert.strictEqual(s.f.count('remoteLinks'), 0);
+  assert.doesNotMatch(fs.readFileSync(s.mirror.pathFor('DEMO-1'), 'utf8'), /Confluence pages/);
+});
+
+test('pages: the untitled pages are read in one titles() call; a page it does not return keeps its URL', async () => {
+  const links = Array.from({ length: 12 }, (_, i) => card(pageUrl(2000 + i)));
+  const s = confSetup({ missing: ['2011'], remote: [{ url: pageUrl('2002'), title: 'Remote Two' }] });
+  s.map.set('DEMO-1', iss('DEMO-1', { description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: links }] } }));
+  const panel = await opened(s);
+  const ids = Array.from({ length: 12 }, (_, i) => String(2000 + i));
+  assert.deepStrictEqual(s.reads, [ids.filter((id) => id !== '2002')], 'one call, without the page the remote link titles');
+  const pages = posted(panel, 'render').pop().pages;
+  assert.deepStrictEqual(pages.map((p) => p.title), ids.map((id) => (id === '2002' ? 'Remote Two' : id === '2011' ? pageUrl(id) : `Page ${id}`)));
+});
+
+test('openPage: the host opens the page through openPage, and falls back to the browser when it says false', async () => {
+  const s = confSetup();
+  const panel = await opened(s);
+  panel.webview._receive({ type: 'openPage', url: pageUrl('1002') }); await settle();
+  assert.deepStrictEqual(s.opened, [pageUrl('1002')]);
+  assert.deepStrictEqual(ui.opened, []);
+  const f = confSetup({ openResult: false });
+  const p2 = await opened(f);
+  p2.webview._receive({ type: 'openPage', url: pageUrl('1002') });
+  p2.webview._receive({ type: 'openPage', url: 'javascript:alert(1)' }); await settle();
+  assert.deepStrictEqual(ui.opened, [pageUrl('1002')], 'only https, and only after openPage said false');
 });

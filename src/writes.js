@@ -6,11 +6,12 @@ const { sameAdf } = require('./adf');
 const OWN_COMMENT_WINDOW_MS = 5 * 60 * 1000;
 const fail = (kind, message, extra) => ({ ok: false, kind, message, ...extra });
 const sameLabels = (a, b) => Array.isArray(a) && new Set(a).size === new Set(b).size && a.every((x) => b.includes(x));
-const KNOWN = new Set(['JiraError', 'Offline', 'SignInNeeded']);
+const KNOWN = new Set(['JiraError', 'Offline', 'SignInNeeded', 'ConfluenceUnavailable']);
 
 // Maps a thrown error to a Result. `phase` is 'read' (pre-save, nothing sent) or 'write'.
-function mapError(e, phase) {
+function mapError(e, phase, product = 'Jira') {
   const name = e && e.name;
+  if (name === 'ConfluenceUnavailable') return fail('failed', "Confluence isn't available with this sign-in");
   // a refused sign-in is failed, with Retry (design 101: refresh once, then failed); the write is never resent by itself
   if (name === 'SignInNeeded') return fail('failed', 'Sign in again, then Retry');
   if (name === 'Offline') return fail('failed', phase === 'read' ? 'Offline — not sent' : 'Offline');
@@ -19,35 +20,37 @@ function mapError(e, phase) {
     const s = e.status;
     if (s === 429) {
       const ms = e.retryAfterMs;
-      const msg = ms == null ? 'Jira is busy; try again shortly' : `Jira is busy; try again in ${Math.ceil(ms / 1000)} s`;
+      const msg = ms == null ? `${product} is busy; try again shortly` : `${product} is busy; try again in ${Math.ceil(ms / 1000)} s`;
       return fail('failed', msg, { retryAfterMs: ms == null ? null : ms });
     }
-    if (s === 401) return fail('failed', 'Jira refused the sign-in (401); not saved');
-    if (s >= 500) return fail('failed', `Jira had a problem (${s})`);
+    if (s === 401) return fail('failed', `${product} refused the sign-in (401); not saved`);
+    if (s >= 500) return fail('failed', `${product} had a problem (${s})`);
     const joined = (e.messages || []).join('; ');
-    return fail('rejected', joined || `Jira rejected the change (${s})`);
+    return fail('rejected', joined || `${product} rejected the change (${s})`);
   }
   return fail('failed', (e && e.message) || 'Failed');
 }
 
-function createWriter({ api, meId, now = Date.now }) {
+// The shared guard: exclusive per key (flag set before any await) and a guarded send that never resends.
+// `noun` is only for the busy message; `map(e)` may turn a known error into a Result before mapError.
+function makeGuard({ product = 'Jira', noun = 'ticket' } = {}) {
   const busy = new Set();
 
   // Runs fn as the only write to key. The flag is set before any await and cleared in finally.
   async function exclusive(key, fn) {
-    if (busy.has(key)) return fail('busy', 'Another change to this ticket is still being saved');
+    if (busy.has(key)) return fail('busy', `Another change to this ${noun} is still being saved`);
     busy.add(key);
     try { return await fn(); } finally { busy.delete(key); }
   }
 
   // `pre` does the pre-save read and returns a failure Result or null; `send` does the one write;
   // `verify` re-reads after a timeout and returns an ok Result or null; `done` builds the ok Result.
-  async function guarded({ pre, send, verify, done }) {
+  async function guarded({ pre, send, verify, done, map }) {
     // A Timeout, or any unexpected error after sending (such as an unreadable 2xx body), may mean the write landed:
     // re-read rather than report failure, so the caller never resends a write that is already there.
     if (pre) {
       let stop;
-      try { stop = await pre(); } catch (e) { return mapError(e, 'read'); }
+      try { stop = await pre(); } catch (e) { return mapError(e, 'read', product); }
       if (stop) return stop;
     }
     let sent;
@@ -55,10 +58,16 @@ function createWriter({ api, meId, now = Date.now }) {
       if (verify && !(e && KNOWN.has(e.name))) {
         try { const v = await verify(); if (v) return v; } catch (_) { /* read-back failed: fall through */ }
       }
-      return mapError(e, 'write');
+      return (map && map(e)) || mapError(e, 'write', product);
     }
     return done(sent);
   }
+
+  return { busy, exclusive, guarded };
+}
+
+function createWriter({ api, meId, now = Date.now }) {
+  const { busy, exclusive, guarded } = makeGuard();
 
   const readBack = async (fn) => { try { return await fn(); } catch (_) { return null; } };
   const conflict = () => fail('conflict', 'Changed in Jira since you opened it');
@@ -132,4 +141,4 @@ function createWriter({ api, meId, now = Date.now }) {
   };
 }
 
-module.exports = { createWriter };
+module.exports = { createWriter, makeGuard, mapError, fail, OWN_COMMENT_WINDOW_MS };

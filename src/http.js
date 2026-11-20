@@ -3,11 +3,13 @@
 const { SignInNeeded } = require('./auth');
 
 class JiraError extends Error {
-  constructor(status, messages = [], retryAfterMs = null) {
-    super(messages.length ? messages.join('; ') : `Jira returned ${status}`);
+  constructor(status, messages = [], retryAfterMs = null, product = 'Jira') {
+    super(messages.length ? messages.join('; ') : `${product} returned ${status}`);
     this.name = 'JiraError'; this.status = status; this.retryAfterMs = retryAfterMs; this.messages = messages;
   }
 }
+// This sign-in cannot use Confluence (a 401 that a refresh did not fix); never a Jira sign-in problem.
+class ConfluenceUnavailable extends Error { constructor(status = 401) { super("Confluence isn't available with this sign-in"); this.name = 'ConfluenceUnavailable'; this.status = status; } }
 class Offline extends Error { constructor(msg = 'offline') { super(msg); this.name = 'Offline'; } }
 class Timeout extends Error { constructor(msg = 'request timed out') { super(msg); this.name = 'Timeout'; } }
 
@@ -18,7 +20,15 @@ function queryString(query) {
 function errorMessages(body) {
   if (!body || typeof body !== 'object') return [];
   const out = Array.isArray(body.errorMessages) ? body.errorMessages.map(String) : [];
-  if (body.errors && typeof body.errors === 'object') out.push(...Object.values(body.errors).map(String));
+  if (body.errors && typeof body.errors === 'object' && !Array.isArray(body.errors)) out.push(...Object.values(body.errors).map(String));
+  if (Array.isArray(body.errors)) {
+    for (const e of body.errors) {
+      if (!e || typeof e !== 'object') continue;
+      const m = e.title && e.detail ? `${e.title}: ${e.detail}` : e.title || e.detail;
+      if (m) out.push(String(m));
+    }
+  }
+  if (!out.length && typeof body.message === 'string' && body.message) out.push(body.message);
   return out;
 }
 function retryAfter(res) {
@@ -26,7 +36,7 @@ function retryAfter(res) {
   return res.headers.get('retry-after') !== null && Number.isFinite(s) ? s * 1000 : null;
 }
 
-function createHttp({ auth, fetch, timeoutMs = 30000 }) {
+function createHttp({ auth, fetch, timeoutMs = 30000, base = () => auth.baseUrl(), product = 'Jira', unavailableOn401 = false }) {
   async function once(method, path, query, body) {
     const headers = { Authorization: await auth.header(), Accept: 'application/json' };
     const init = { method, headers };
@@ -34,7 +44,7 @@ function createHttp({ auth, fetch, timeoutMs = 30000 }) {
     const ctl = new AbortController(); init.signal = ctl.signal;
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      const res = await fetch(auth.baseUrl() + path + queryString(query), init);
+      const res = await fetch(base() + path + queryString(query), init);
       const text = await res.text();
       return { res, text };
     } catch (e) {
@@ -45,16 +55,17 @@ function createHttp({ auth, fetch, timeoutMs = 30000 }) {
   function result({ res, text }) {
     const body = parse(text);
     if (res.status >= 200 && res.status < 300) return body;
-    throw new JiraError(res.status, errorMessages(body), retryAfter(res));
+    throw new JiraError(res.status, errorMessages(body), retryAfter(res), product);
   }
 
   // Reads (GET, or a POST that only reads, like search) retry once after a refresh; writes never do.
   async function read(method, path, query, body) {
+    const rejected = () => (unavailableOn401 ? new ConfluenceUnavailable(401) : new SignInNeeded('rejected'));
     let r = await once(method, path, query, body);
     if (r.res.status === 401) {
-      if (!(await auth.onUnauthorized())) throw new SignInNeeded('rejected');
+      if (!(await auth.onUnauthorized())) throw rejected();
       r = await once(method, path, query, body);
-      if (r.res.status === 401) throw new SignInNeeded('rejected');
+      if (r.res.status === 401) throw rejected();
     }
     return result(r);
   }
@@ -72,4 +83,4 @@ function createHttp({ auth, fetch, timeoutMs = 30000 }) {
   };
 }
 
-module.exports = { JiraError, Offline, Timeout, createHttp };
+module.exports = { JiraError, ConfluenceUnavailable, Offline, Timeout, createHttp };

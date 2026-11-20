@@ -1,0 +1,5 @@
+{"results":[
+{"id":"1010","status":"current","title":"Child Page","childPosition":0,"type":"page"},
+{"id":"3001","status":"current","title":"Archive Folder","childPosition":1,"type":"folder"},
+{"id":"4001","status":"current","title":"Sketches","childPosition":2,"type":"whiteboard"}
+],"_links":{"next":"/wiki/api/v2/pages/1001/direct-children?cursor=CH2&limit=250","base":"https://example.atlassian.net/wiki"}}

@@ -7,7 +7,7 @@ test('manifest', () => {
   assert.strictEqual(p.engines.vscode, '^1.90.0');
   assert.deepStrictEqual(Object.keys(p.dependencies || {}), []);
   const props = p.contributes.configuration.properties;
-  assert.deepStrictEqual(Object.keys(props).sort(), ['jay.agentFiles','jay.columns','jay.period','jay.placeholderAssignees','jay.quarter.fiscalYearStart',
+  assert.deepStrictEqual(Object.keys(props).sort(), ['jay.agentFiles','jay.columns','jay.confluence.enabled','jay.period','jay.placeholderAssignees','jay.quarter.fiscalYearStart',
     'jay.quarter.patterns','jay.signIn.refreshCommand','jay.signIn.tokenFile','jay.site','jay.ticketView']);
   assert.strictEqual(props['jay.quarter.fiscalYearStart'].default, 1);
   assert.deepStrictEqual(props['jay.quarter.patterns'].default, ['label:FY{YYYY}Q{Q}', 'label:FY{YY}-Q{Q}', 'summary:[Q{Q}FY{YY}]']);
@@ -25,7 +25,13 @@ test('manifest', () => {
   assert.strictEqual(p.extensionDependencies, undefined, 'the Atlassian extension is a soft dependency');
   const hidden = p.contributes.menus.commandPalette.find((m) => m.command === 'jay.activeIssueFile');
   assert.strictEqual(hidden.when, 'false');
-  for (const c of ['jay.openTicket', 'jay.projectKeys']) {
+  assert.strictEqual(props['jay.confluence.enabled'].default, true);
+  assert.strictEqual(props['jay.confluence.enabled'].type, 'boolean');
+  assert.strictEqual(props['jay.confluence.enabled'].description, 'Show the Jira | Confluence switch and check Confluence for mentions.');
+  assert.strictEqual(p.contributes.viewsContainers.activitybar[0].title, 'Jira and Confluence');
+  assert.strictEqual(p.contributes.views.jay[0].name, 'Jira', 'the view title is set at run time');
+  assert.ok(p.activationEvents.includes('onWebviewPanel:jay.page'));
+  for (const c of ['jay.openTicket', 'jay.projectKeys', 'jay.openPage', 'jay.siteUrl', 'jay.activePageFile']) {
     assert.ok(p.contributes.commands.some((x) => x.command === c), c + ' is contributed');
     assert.strictEqual(p.contributes.menus.commandPalette.find((m) => m.command === c).when, 'false', c + ' is hidden');
   }

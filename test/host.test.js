@@ -28,6 +28,8 @@ function jira(world) {
     calls.push({ url: String(url), method: init.method, auth: init.headers.Authorization, jql: body && body.jql, fields: body && body.fields });
     const ok = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
     if (world.reject) return new Response('{}', { status: 401 });
+    const w = /^(?:\/ex\/confluence\/[^/]+)?\/wiki(\/.*)$/.exec(u.pathname);
+    if (w) return wiki(world, decodeURIComponent(w[1]), u, ok);
     const p = decodeURIComponent(u.pathname.replace(/^\/ex\/jira\/[^/]+/, ''));
     if (world.offline && p === '/rest/api/3/search/jql') throw new TypeError('fetch failed');
     if (world.agileGate && p.startsWith('/rest/agile/')) await world.agileGate;
@@ -57,7 +59,9 @@ function jira(world) {
       if (world.search && /^text ~ /.test(jql)) return world.search(body, ok);
       return ok({ issues: [] });
     }
-    let m = /^\/rest\/api\/3\/issue\/([^/]+)\/comment$/.exec(p);
+    let m = /^\/rest\/api\/3\/issue\/([^/]+)\/remotelink$/.exec(p);
+    if (m) return ok(((world.remoteLinks || {})[m[1]] || []).map((l) => ({ object: l })));
+    m = /^\/rest\/api\/3\/issue\/([^/]+)\/comment$/.exec(p);
     if (m) { const cs = (world.comments || {})[m[1]] || []; return ok({ comments: cs, total: cs.length }); }
     m = /^\/rest\/api\/3\/issue\/([^/]+)$/.exec(p);
     if (m) { const all = [...Object.values(world.epics).flat(), ...world.children]; const i = all.find((x) => x.key === m[1]); return i ? ok(i) : new Response('{}', { status: 404 }); }
@@ -66,6 +70,28 @@ function jira(world) {
   fetch.calls = calls;
   return fetch;
 }
+
+const DEMO_SPACE = { id: '2001', key: 'DEMO', name: 'Demo Space', type: 'global', homepageId: '1001' };
+/** The fake's Confluence, under /wiki (an API token) or /ex/confluence/<cloud>/wiki (a token file). */
+async function wiki(world, p, u, ok) {
+  if (world.wikiHold && world.wikiHold[p]) await world.wikiHold[p];   // held until the test releases it
+  if (world.wikiFail) { const r = world.wikiFail(p, u); if (r) return r; }
+  const spaces = world.spaces || [DEMO_SPACE];
+  if (p === '/api/v2/spaces') { const k = u.searchParams.get('keys'); return ok({ results: k ? spaces.filter((x) => x.key === k) : spaces, _links: {} }); }
+  if (/^\/api\/v2\/spaces\/\d+\/pages$/.test(p)) return ok({ results: world.rootPages || [{ id: '1001', title: 'Demo Home' }], _links: {} });
+  const m = /^\/api\/v2\/(?:pages|folders)\/(\d+)\/direct-children$/.exec(p);
+  if (m) return ok({ results: (world.childPages || {})[m[1]] || [], _links: {} });
+  if (p === '/rest/api/search') {
+    const cql = u.searchParams.get('cql');
+    const all = (/^mention = currentUser\(\)/.test(cql) ? world.mentionHits : /^creator = currentUser\(\)/.test(cql) ? world.myPages : /^siteSearch ~ /.test(cql) ? world.confSearch : null) || [];
+    const from = Number(u.searchParams.get('start')) || 0; const limit = Number(u.searchParams.get('limit')) || 25;
+    return ok({ results: all.slice(from, from + limit), totalSize: all.length });
+  }
+  return new Response('{}', { status: 404 });
+}
+/** A v1 search result: a page, or a comment on the page `container`. */
+const chit = (id, o = {}) => ({ lastModified: o.at || '2027-01-15T11:00:00.000Z', content: { id, type: o.type || 'page', title: o.title || `Page ${id}`, space: { key: 'DEMO' },
+  container: o.container ? { id: o.container } : undefined, version: { by: o.by || OTHER }, _links: { webui: `/spaces/DEMO/pages/${id}` } } });
 
 /** Timers the pollers use: nothing fires by itself; fire() runs what is due. */
 function fakeTimers() {
@@ -109,6 +135,7 @@ function start(o = {}) {
   const fetch = jira(world);
   const sec = o.secrets || secrets();
   if (!o.signedOut) { sec.m.set('jay.email', 'ann@example.com'); sec.m.set('jay.apiToken', 'tok-api'); ui.config['jay.site'] = SITE; }
+  if (!o.confluence) ui.config['jay.confluence.enabled'] = false;   // the Jira tests run without Confluence's pollers
   Object.assign(ui.config, o.config || {});
   const gs = o.gs || memento();
   const stored = Object.assign({ 'jay.project': 'DEMO', 'jay.quarter': 'any' }, o.stored);
@@ -1153,7 +1180,7 @@ test('a tab restored before sign-in says it is waiting, then loads once the sess
   const who = gate();
   const h = start({ world: { hold: { '/rest/api/3/myself': who.p } } });
   const panel = vscode.window.createWebviewPanel('jay.ticket', 'DEMO-1', 1, {});
-  await ui.serializer.deserializeWebviewPanel(panel, { key: 'DEMO-1' });
+  await ui.serializers['jay.ticket'].deserializeWebviewPanel(panel, { key: 'DEMO-1' });
   panel.webview._receive({ type: 'ready' }); await settle();
   const types = () => panel.webview.posted.map((m) => m.type);
   assert.ok(!types().includes('loadError'), JSON.stringify(panel.webview.posted));
@@ -1362,4 +1389,272 @@ test('jay.projectKeys returns the loaded project keys; [] when signed out', asyn
   start({ signedOut: true, config: { 'jay.site': SITE } });
   await settle();
   assert.deepStrictEqual(await ui.commands['jay.projectKeys'](), []);
+});
+
+// ---- Confluence (design 102)
+const wikiCalls = (h) => h.fetch.calls.filter((c) => c.url.includes('/wiki/'));
+const isProbe = (c) => /\/wiki\/api\/v2\/spaces\?limit=1$/.test(c.url);
+const cqlOf = (c) => new URL(c.url).searchParams.get('cql');
+const PAGE_URL = SITE + '/wiki/spaces/DEMO/pages/1001';
+function scopedTokenFile(home, scope) {
+  const f = path.join(home, 'creds.json');
+  fs.writeFileSync(f, JSON.stringify({ access_token: JWT({ sub: 'x' }), cloud_id: 'cloud-1', jira_url: SITE, ...(scope ? { scope } : {}) }), { mode: 0o600 });
+  return f;
+}
+
+test('Confluence is on by default and probed once; then its tab and mentions pollers run beside Jira\'s, and the spaces load', async () => {
+  const h = start({ confluence: true });
+  await settle();
+  assert.strictEqual(wikiCalls(h).filter(isProbe).length, 1);
+  assert.ok(wikiCalls(h).every((c) => c.url.startsWith(SITE + '/wiki/')), 'an API token: <site>/wiki');
+  const st = lastState(h.view);
+  assert.strictEqual(st.confluenceEnabled, true);
+  assert.strictEqual(st.side, 'jira');
+  assert.strictEqual(st.conf.note, null);
+  assert.strictEqual(st.conf.account, 'Signed in as ann@example.com (API token)');
+  assert.deepStrictEqual(st.conf.spaces, [{ key: 'DEMO', name: 'Demo Space', type: 'global' }]);
+  assert.deepStrictEqual(st.conf.open, { mine: false, tree: true });
+  assert.deepStrictEqual(h.timers.delays(), [30000, 30000, 60000, 300000, 300000], "Jira's three, then confTab and confMentions; My pages is closed");
+  h.timers.fire(); await settle();
+  assert.strictEqual(wikiCalls(h).filter(isProbe).length, 1, 'never probed again');
+  assert.strictEqual(h.view.title, 'Jira');
+});
+
+test('Review Focus 4: Confluence refusing this sign-in (or a site with no Confluence, 404) shows the note and stops only Confluence; Jira stays signed in and polling', async () => {
+  for (const status of [401, 403, 404]) {
+    const h = start({ confluence: true, world: { wikiFail: (p) => (p === '/api/v2/spaces' ? new Response('{}', { status }) : null) } });
+    await settle();
+    const st = lastState(h.view);
+    assert.strictEqual(st.conf.note, "Confluence isn't available with this sign-in", String(status));
+    assert.strictEqual(h.api.state.running, true);
+    assert.strictEqual(st.signedIn, true); assert.strictEqual(st.error, null);
+    assert.deepStrictEqual(keysOf(st), ['DEMO-1']);
+    assert.deepStrictEqual(h.timers.delays(), [30000, 60000, 300000], "only Jira's pollers");
+    const n = wikiCalls(h).length; const jql = h.fetch.calls.filter((c) => c.jql).length;
+    h.timers.fire(); await settle();
+    assert.strictEqual(wikiCalls(h).length, n, 'no more Confluence requests');
+    assert.ok(h.fetch.calls.filter((c) => c.jql).length > jql, 'the Jira tree keeps polling');
+    assert.strictEqual(h.api.state.running, true);
+    assert.strictEqual(await ui.commands['jay.openPage'](PAGE_URL), false);
+    ext.deactivate(); running.length = 0;
+  }
+});
+
+test('a page tab restored while Confluence is probed waits; a refused probe turns it into the unavailable loadError', async () => {
+  const probe = gate();
+  start({ confluence: true, world: { wikiHold: { '/api/v2/spaces': probe.p }, wikiFail: (p) => (p === '/api/v2/spaces' ? new Response('{}', { status: 403 }) : null) } });
+  const panel = vscode.window.createWebviewPanel('jay.page', 'Demo Home', 1, {});
+  await ui.serializers['jay.page'].deserializeWebviewPanel(panel, { pageId: '1001' });
+  panel.webview._receive({ type: 'ready' }); await settle();
+  assert.deepStrictEqual(panel.webview.posted.filter((m) => m.type !== 'waiting'), [], JSON.stringify(panel.webview.posted));
+  assert.ok(panel.webview.posted.some((m) => m.type === 'waiting'));
+  probe.release(); await settle();
+  assert.deepStrictEqual(panel.webview.posted.filter((m) => m.type === 'loadError'), [{ type: 'loadError', message: "Confluence isn't available with this sign-in" }]);
+});
+
+test('a token file with no Confluence scopes: "can\'t use Confluence yet", no /wiki request, Jira as usual', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jay-pod-'));
+  const h = start({ confluence: true, config: { 'jay.signIn.tokenFile': scopedTokenFile(home, null) } });
+  await settle();
+  const st = lastState(h.view);
+  assert.strictEqual(st.conf.note, "This sign-in can't use Confluence yet");
+  assert.strictEqual(wikiCalls(h).length, 0);
+  assert.deepStrictEqual(keysOf(st), ['DEMO-1']);
+  assert.strictEqual(h.timers.pending.size, 3);
+  assert.strictEqual(await ui.commands['jay.openPage'](PAGE_URL), false);
+});
+
+test('a token file with read scopes: Confluence through api.atlassian.com/ex/confluence/<cloud_id>/wiki', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jay-pod-'));
+  const h = start({ confluence: true, config: { 'jay.signIn.tokenFile': scopedTokenFile(home, 'read:jira-work read:page:confluence') } });
+  await settle();
+  const probes = wikiCalls(h).filter(isProbe);
+  assert.strictEqual(probes.length, 1);
+  assert.ok(probes[0].url.startsWith('https://api.atlassian.com/ex/confluence/cloud-1/wiki/api/v2/spaces'), probes[0].url);
+  assert.strictEqual(lastState(h.view).conf.note, null);
+});
+
+test('setSide stores the side and sets the view title; turning Confluence off goes back to Jira', async () => {
+  const h = start({ confluence: true });
+  await settle();
+  assert.strictEqual(h.view.title, 'Jira');
+  h.view.webview._receive({ type: 'setSide', side: 'confluence' });
+  assert.strictEqual(h.gs.get('jay.side'), 'confluence');
+  assert.strictEqual(h.view.title, 'Confluence');
+  assert.strictEqual(lastState(h.view).side, 'confluence');
+  h.view.webview._receive({ type: 'setSide', side: 'wiki' });
+  assert.strictEqual(h.gs.get('jay.side'), 'confluence', 'an unknown side is ignored');
+  ui.setConfig('jay.confluence.enabled', false); await settle();
+  const st = lastState(h.view);
+  assert.strictEqual(st.side, 'jira'); assert.strictEqual(st.confluenceEnabled, false);
+  assert.strictEqual(h.view.title, 'Jira');
+  assert.deepStrictEqual(h.timers.delays(), [30000, 60000, 300000], 'the Confluence pollers stopped');
+  assert.strictEqual(await ui.commands['jay.openPage'](PAGE_URL), false);
+  // the side is remembered across a reload
+  const again = start({ confluence: true, gs: h.gs });
+  await settle();
+  assert.strictEqual(again.view.title, 'Confluence');
+});
+
+test('mentions: the first poll is the baseline; a new mention by someone else adds 1 to the badge; opening it scrolls to the comment and clears it', async () => {
+  const h = start({ confluence: true, world: { mentionHits: [chit('1001')] } });
+  await settle();
+  const q = wikiCalls(h).find((c) => c.url.includes('/rest/api/search'));
+  assert.strictEqual(cqlOf(q), 'mention = currentUser() order by lastmodified desc');
+  assert.strictEqual(new URL(q.url).searchParams.get('limit'), '50');
+  assert.strictEqual(h.view.badge, undefined);
+  assert.deepStrictEqual(lastState(h.view).conf.mentions, []);
+  h.world.mentionHits = [chit('5001', { type: 'comment', title: 'Re: Demo Home', container: '1001' }), chit('1001'), chit('1002', { by: ME })];
+  h.timers.fire(); await settle();
+  assert.strictEqual(h.view.badge.value, 1, 'mine (1002) and the known page (1001) do not count');
+  assert.deepStrictEqual(lastState(h.view).conf.mentions, [{ id: '5001', pageId: '1001', title: 'Re: Demo Home', byName: 'Bo Sample', at: '2027-01-15T11:00:00.000Z', lit: true }]);
+  h.view.webview._receive({ type: 'openMention', id: '5001' }); await settle();
+  const panel = ui.panels.at(-1);
+  assert.strictEqual(panel.viewType, 'jay.page');
+  assert.strictEqual(h.view.badge, undefined);
+  assert.deepStrictEqual(lastState(h.view).conf.mentions, []);
+  const saved = JSON.parse(fs.readFileSync(path.join(h.jayDir, 'seen.json'), 'utf8')).confluence;
+  assert.ok(saved.seen['5001'] >= saved.lit['5001']);
+});
+
+test('jay.openPage opens a page tab for a page on the site, and false for anything else; jay.siteUrl and jay.activePageFile', async () => {
+  const h = start({ confluence: true });
+  await settle();
+  assert.strictEqual(await ui.commands['jay.openPage'](PAGE_URL), true);
+  assert.strictEqual(ui.panels.at(-1).viewType, 'jay.page');
+  assert.strictEqual(await ui.commands['jay.openPage'](PAGE_URL), true, 'already open: focused');
+  assert.strictEqual(ui.panels.filter((p) => p.viewType === 'jay.page').length, 1);
+  for (const u of ['https://other.example.com/x', SITE + '/browse/DEMO-1', 42, undefined]) assert.strictEqual(await ui.commands['jay.openPage'](u), false, String(u));
+  assert.strictEqual(ui.commands['jay.siteUrl'](), SITE);
+  assert.strictEqual(ui.commands['jay.activePageFile'](), null, 'not loaded yet: no file');
+  await ui.commands['jay.signOut']();
+  assert.strictEqual(ui.commands['jay.siteUrl'](), null);
+  assert.strictEqual(await ui.commands['jay.openPage'](PAGE_URL), false);
+});
+
+test('the tree: setSpace loads it and remembers the space; expandPage loads children; openPage from the sidebar; sign-out removes the page files and caches', async () => {
+  const h = start({ confluence: true, world: { childPages: { 1001: [{ id: '1101', type: 'page', title: 'Child A' }, { id: '1102', type: 'whiteboard', title: 'Board B' }] } } });
+  await settle();
+  const r = (m) => h.view.webview._receive(m);
+  r({ type: 'setSpace', key: 'NOPE' });
+  assert.strictEqual(h.gs.get('jay.space'), undefined, 'an unknown space is ignored');
+  r({ type: 'setSpace', key: 'DEMO' }); await settle();
+  assert.strictEqual(h.gs.get('jay.space'), 'DEMO');
+  assert.deepStrictEqual(h.gs.get('jay.recentSpaces'), ['DEMO']);
+  let conf = lastState(h.view).conf;
+  assert.deepStrictEqual(conf.space, { key: 'DEMO', name: 'Demo Space' });
+  assert.deepStrictEqual(conf.roots, ['1001']);
+  assert.deepStrictEqual(conf.items['1001'], { id: '1001', kind: 'page', title: 'Demo Home', parentId: null, children: [], childrenLoaded: false, hasMore: false });
+  r({ type: 'expandPage', id: '1001' }); await settle();
+  conf = lastState(h.view).conf;
+  assert.deepStrictEqual(conf.items['1001'].children, ['1101', '1102']);
+  assert.strictEqual(conf.items['1102'].kind, 'whiteboard');
+  const cache = path.join(h.jayDir, 'cache', 'confluence-2001.json');
+  assert.strictEqual(JSON.parse(fs.readFileSync(cache, 'utf8')).owner, ME.accountId);
+  r({ type: 'openPage', id: '1102' }); await settle();
+  assert.deepStrictEqual(ui.opened.slice(-1), [SITE + '/wiki/spaces/DEMO/whiteboard/1102'], 'non-page content opens in the browser');
+  r({ type: 'openPage', id: '1101' }); await settle();
+  assert.strictEqual(ui.panels.at(-1).viewType, 'jay.page');
+  r({ type: 'openPage', url: SITE + '/wiki/spaces/DEMO/pages/1001?focusedCommentId=5001' }); await settle();
+  assert.strictEqual(ui.panels.filter((p) => p.viewType === 'jay.page').length, 2);
+
+  // the files page tabs write
+  fs.mkdirSync(path.join(h.jayDir, 'pages'), { recursive: true });
+  fs.writeFileSync(path.join(h.jayDir, 'pages', 'DEMO-1101.confluence'), 'x');
+  fs.writeFileSync(path.join(h.jayDir, 'current.confluence'), 'x');
+  await ui.commands['jay.signOut']();
+  for (const f of ['pages', 'current.confluence', 'cache']) assert.ok(!fs.existsSync(path.join(h.jayDir, f)), f);
+  assert.ok(ui.panels.filter((p) => p.viewType === 'jay.page').every((p) => p.disposed), 'page tabs closed');
+  assert.deepStrictEqual(lastState(h.view).conf.roots, []);
+
+  // signed in again: the stored space's tree loads afresh
+  await h.gs.update('jay.signedOut', undefined);
+  const again = start({ confluence: true, gs: h.gs, home: h.home });
+  await settle();
+  assert.deepStrictEqual(lastState(again.view).conf.roots, ['1001']);
+});
+
+test('My pages: opening the section polls the pages I created; More pages through; the choice is remembered', async () => {
+  const mine = Array.from({ length: 30 }, (_, i) => chit(String(3000 + i), { by: ME }));
+  const h = start({ confluence: true, world: { myPages: mine } });
+  await settle();
+  const mineCalls = () => wikiCalls(h).filter((c) => c.url.includes('/rest/api/search') && /^creator/.test(cqlOf(c)));
+  assert.strictEqual(mineCalls().length, 0, 'closed by default: not polled');
+  h.view.webview._receive({ type: 'toggleSection', name: 'mine' }); await settle();
+  assert.deepStrictEqual(h.gs.get('jay.confluence.open'), { mine: true, tree: true });
+  assert.strictEqual(cqlOf(mineCalls()[0]), 'creator = currentUser() and type = page order by created desc');
+  assert.strictEqual(new URL(mineCalls()[0].url).searchParams.get('limit'), '25');
+  let m = lastState(h.view).conf.mine;
+  assert.strictEqual(m.items.length, 25); assert.strictEqual(m.hasMore, true);
+  assert.deepStrictEqual(m.items[0], { id: '3000', title: 'Page 3000', spaceKey: 'DEMO' });
+  assert.ok(h.timers.delays().includes(900000), 'every 15 minutes while open');
+  h.view.webview._receive({ type: 'moreMine' }); await settle();
+  m = lastState(h.view).conf.mine;
+  assert.strictEqual(m.items.length, 30); assert.strictEqual(m.hasMore, false);
+  h.view.webview._receive({ type: 'toggleSection', name: 'mine' });
+  assert.ok(!h.timers.delays().includes(900000), 'closed: no longer polled');
+  h.view.webview._receive({ type: 'toggleSection', name: 'nope' });
+  assert.deepStrictEqual(h.gs.get('jay.confluence.open'), { mine: false, tree: true });
+});
+
+test('confSearch: CQL siteSearch with the query escaped, 20 at most; invalid messages ignored; a failure is only an error reply', async () => {
+  const h = start({ confluence: true, world: { confSearch: Array.from({ length: 25 }, (_, i) => chit(String(4000 + i))) } });
+  await settle();
+  h.view.webview._receive({ type: 'confSearch', id: 7, query: 'a "b" \\c' }); await settle();
+  const call = wikiCalls(h).filter((c) => c.url.includes('/rest/api/search') && /^siteSearch/.test(cqlOf(c))).at(-1);
+  assert.strictEqual(cqlOf(call), 'siteSearch ~ "a \\"b\\" \\\\c" and type = page');
+  assert.strictEqual(new URL(call.url).searchParams.get('limit'), '20');
+  const reply = h.view.webview.posted.filter((m) => m.type === 'confSearchResults').at(-1);
+  assert.strictEqual(reply.id, 7); assert.strictEqual(reply.query, 'a "b" \\c');
+  assert.strictEqual(reply.items.length, 20);
+  assert.deepStrictEqual(reply.items[0], { id: '4000', title: 'Page 4000', spaceKey: 'DEMO' });
+  const n = h.view.webview.posted.length;
+  h.view.webview._receive({ type: 'confSearch', id: 8, query: 'ab' }); h.view.webview._receive({ type: 'confSearch', id: '9', query: 'abc' });
+  await settle();
+  assert.strictEqual(h.view.webview.posted.filter((m) => m.type === 'confSearchResults').length, 1, 'too short, or a bad id: no reply');
+  h.world.wikiFail = (p) => (p === '/rest/api/search' ? new Response('{}', { status: 500 }) : null);
+  h.view.webview._receive({ type: 'confSearch', id: 10, query: 'abc' }); await settle();
+  assert.deepStrictEqual(h.view.webview.posted.slice(n).filter((m) => m.type === 'confSearchResults').at(-1), { type: 'confSearchResults', id: 10, query: 'abc', error: 'Confluence search failed' });
+  assert.strictEqual(lastState(h.view).conf.note, null);
+  assert.strictEqual(h.api.state.running, true);
+});
+
+test('a probe in flight when Jira asks for sign-in starts nothing once it answers: no Confluence pollers, no more /wiki requests', async () => {
+  const probe = gate();
+  const h = start({ confluence: true, world: {
+    wikiHold: { '/api/v2/spaces': probe.p },
+    fail: (p) => (p === '/rest/api/3/myself' ? new Response('{}', { status: 401 }) : null),
+  } });
+  await settle();
+  assert.strictEqual(h.api.state.running, false, 'Jira rejected the sign-in');
+  assert.strictEqual(lastState(h.view).error, 'API token rejected: jay: Sign In again');
+  assert.strictEqual(wikiCalls(h).filter(isProbe).length, 1, 'the probe went out before');
+  probe.release(); await settle();
+  assert.strictEqual(h.timers.pending.size, 0, 'no Confluence poller started');
+  const n = wikiCalls(h).length;
+  assert.strictEqual(n, 1, 'no spaces or tree load after the probe');
+  h.timers.fire(); await settle();
+  assert.strictEqual(wikiCalls(h).length, n);
+  assert.ok(!fs.existsSync(path.join(h.jayDir, 'cache')), 'no tree cache written');
+  // and the sidebar's Confluence actions send nothing while signed out
+  const r = (m) => h.view.webview._receive(m);
+  r({ type: 'setSpace', key: 'DEMO' }); r({ type: 'expandPage', id: '1001' }); r({ type: 'morePages', id: null }); r({ type: 'openMention', id: '1' });
+  r({ type: 'moreMine' }); r({ type: 'confSearch', id: 1, query: 'abc' }); r({ type: 'toggleSection', name: 'mine' });
+  await settle();
+  assert.strictEqual(wikiCalls(h).length, n);
+  assert.strictEqual(h.timers.pending.size, 0);
+  assert.strictEqual(h.view.webview.posted.filter((m) => m.type === 'confSearchResults').at(-1).error, 'Confluence search failed');
+});
+
+test('a ticket tab lists the Confluence pages its remote links point to; clicking one opens a jay.page tab', async () => {
+  const h = start({ confluence: true, world: { remoteLinks: { 'DEMO-2': [{ url: PAGE_URL, title: 'Demo Home' }, { url: 'https://other.example.com/x', title: 'Elsewhere' }] } } });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' }); await settle(80);
+  const tab = ui.panels.find((p) => p.viewType === 'jay.ticket');
+  assert.ok(tab, 'a jay ticket tab');
+  tab.webview._receive({ type: 'ready' }); await settle(80);
+  assert.deepStrictEqual(tab.webview.posted.filter((m) => m.type === 'render').at(-1).pages, [{ url: PAGE_URL, title: 'Demo Home' }]);
+  assert.match(fs.readFileSync(path.join(h.jayDir, 'issues', 'DEMO-2.jira'), 'utf8'), /## Confluence pages\n- Demo Home — /);
+  tab.webview._receive({ type: 'openPage', url: PAGE_URL }); await settle(80);
+  assert.strictEqual(ui.panels.at(-1).viewType, 'jay.page');
 });

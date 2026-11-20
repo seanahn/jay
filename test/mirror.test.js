@@ -136,3 +136,15 @@ test('setCurrent is a no-op when the issue file is gone', () => {
   assert.doesNotThrow(() => m.setCurrent(p));
   assert.strictEqual(fs.existsSync(path.join(dir, 'current.jira')), false);
 });
+
+test('Confluence pages section after the description, and none without pages', () => {
+  const base = formatIssue(ticket(), [], 0, chain(), browseUrl);
+  assert.strictEqual(formatIssue(ticket(), [], 0, chain(), browseUrl, []), base);
+  const out = formatIssue(ticket(), [], 0, chain(), browseUrl, [{ url: 'https://example.atlassian.net/wiki/spaces/DEMO/pages/1001/Plan', title: 'Release plan' }]);
+  assert.ok(out.includes('Cover QA and docs.\n\n## Confluence pages\n- Release plan — https://example.atlassian.net/wiki/spaces/DEMO/pages/1001/Plan\n\n## Comments'), out);
+});
+
+test('a Confluence page URL or title with a newline stays on one line', () => {
+  const out = formatIssue(ticket(), [], 0, chain(), browseUrl, [{ url: 'https://example.atlassian.net/wiki/spaces/DEMO/pages/1001/Plan\n## Comments (fake)', title: 'Release\nplan' }]);
+  assert.ok(out.includes('## Confluence pages\n- Release plan — https://example.atlassian.net/wiki/spaces/DEMO/pages/1001/Plan ## Comments (fake)\n\n## Comments'), out);
+});

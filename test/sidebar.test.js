@@ -62,3 +62,13 @@ test('focusSearch shows the view and tells the page', () => {
   assert.strictEqual(shown, 1);
   assert.deepStrictEqual(view.webview.posted.pop(), { type: 'focusSearch' });
 });
+
+test('setTitle sets the view title, also when set before the view resolves', () => {
+  const s = new Sidebar(vscode.Uri.file('/ext'));
+  s.setTitle('Confluence');
+  vscode.window.registerWebviewViewProvider('jay.sidebar', s);
+  const view = ui.resolveSidebar();
+  assert.strictEqual(view.title, 'Confluence');
+  s.setTitle('Jira');
+  assert.strictEqual(view.title, 'Jira');
+});

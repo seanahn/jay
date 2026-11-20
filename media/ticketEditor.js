@@ -1,7 +1,7 @@
 'use strict';
 // The ticket page's ProseMirror side: read-only rendering of ADF, and the editor used for the description and comments
 // (history, keymap, lists, input rules, @-mentions; atoms as labeled chips). Loaded after prosemirror.js and adfPm.js,
-// before ticket.js, as window.jayEditor. Jira text reaches the DOM only through ProseMirror's serializer and textContent.
+// before ticket.js or page.js (the Confluence page), as window.jayEditor. Jira text reaches the DOM only through ProseMirror's serializer and textContent.
 (function () {
   const PM = window.PM;
   const { schema, fromAdf, toAdf } = window.makeAdfPm(PM.model);
@@ -39,22 +39,25 @@
     }
     return '';
   }
-  /** A chip (inline) or box (block) labeling an atom; media gets an "Open in Jira" button. */
-  function atomDom(adf, inline, onOpenJira) {
+  const MACROS = new Set(['extension', 'bodiedExtension', 'inlineExtension']);
+  /** A chip (inline) or box (block) labeling an atom; media gets an "Open in Jira" button (openLabel: another product). */
+  function atomDom(adf, inline, onOpenJira, openLabel) {
     const type = typeOf(adf);
     const dom = el(inline ? 'span' : 'div', 'jay-atom ' + (inline ? 'jay-atom-inline' : 'jay-atom-block'));
     dom.setAttribute('data-type', type);
     dom.setAttribute('contenteditable', 'false');
     if (MEDIA.has(type)) {
       dom.appendChild(document.createTextNode('[image] '));
-      const b = el('button', 'open-jira', 'Open in Jira');
+      const b = el('button', 'open-jira', openLabel || 'Open in Jira');
       b.type = 'button';
       b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (onOpenJira) onOpenJira(); });
       dom.appendChild(b);
     } else if (type === 'panel') {
       const line = firstLine(adf);
       dom.textContent = line ? `[panel: ${line}]` : '[panel]';
-    } else dom.textContent = `[${type}]`;
+    } else if (MACROS.has(type)) dom.textContent = `[macro: ${(adf.attrs && adf.attrs.extensionKey) || ''}]`;
+    else if (type === 'layoutSection') dom.textContent = '[layout]';
+    else dom.textContent = `[${type}]`;
     return dom;
   }
   function mentionDom(node, meId) {
@@ -65,13 +68,13 @@
 
   // ---- read-only rendering ----
   /** ADF as DOM, through ProseMirror's serializer; never an HTML string. */
-  function renderAdf(adf, { meId, onOpenJira } = {}) {
+  function renderAdf(adf, { meId, onOpenJira, openLabel } = {}) {
     let doc;
-    try { doc = fromAdf(adf); } catch (_) { return el('div', 'jay-unreadable', '[content jay cannot show: Open in Jira]'); }
+    try { doc = fromAdf(adf); } catch (_) { return el('div', 'jay-unreadable', `[content jay cannot show: ${openLabel || 'Open in Jira'}]`); }
     const base = DOMSerializer.fromSchema(schema);
     const nodes = Object.assign({}, base.nodes, {
-      atomBlock: (n) => atomDom(n.attrs.adf, false, onOpenJira),
-      atomInline: (n) => atomDom(n.attrs.adf, true, onOpenJira),
+      atomBlock: (n) => atomDom(n.attrs.adf, false, onOpenJira, openLabel),
+      atomInline: (n) => atomDom(n.attrs.adf, true, onOpenJira, openLabel),
       mention: (n) => mentionDom(n, meId),
     });
     const ser = new DOMSerializer(nodes, base.marks);
@@ -177,7 +180,7 @@
   /**
    * An editor in `mount` holding `adf` (null: empty).
    * @param o.onSubmit()  Mod-Enter     @param o.onCancel()  Escape     @param o.onChange()  after each change
-   * @param o.searchUsers(query, cb)    for @-mentions     @param o.onOpenJira()  a media chip's button
+   * @param o.searchUsers(query, cb)    for @-mentions     @param o.onOpenJira()  a media chip's button (labeled o.openLabel)
    * @returns { view, toAdf(), isEmpty(), destroy() }
    */
   function createEditor(mount, adf, o = {}) {
@@ -203,7 +206,7 @@
       ],
     });
     const atomView = (inline) => (node) => {
-      const dom = atomDom(node.attrs.adf, inline, o.onOpenJira);
+      const dom = atomDom(node.attrs.adf, inline, o.onOpenJira, o.openLabel);
       return { dom, ignoreMutation: () => true, stopEvent: (e) => !!(e.target && e.target.closest && e.target.closest('.open-jira')) };
     };
     const view = new EditorView(wrap, {

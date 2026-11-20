@@ -38,7 +38,7 @@ function treeLines(issue, chain) {
   return lines;
 }
 
-function formatIssue(issue, comments, total, chain, browseUrl) {
+function formatIssue(issue, comments, total, chain, browseUrl, pages) {
   const head = [
     `# Jira ${oneLine(issue.type || 'Issue')} ${issue.key}: ${oneLine(issue.summary)}`,
     `# ${browseUrl(issue.key)}`,
@@ -60,8 +60,18 @@ function formatIssue(issue, comments, total, chain, browseUrl) {
     `Created: ${stamp(issue.created)} · Updated: ${stamp(issue.updated)}`, '',
     '## Tree', ...treeLines(issue, chain || {}), '',
     '## Description', toText(issue.description) || '(none)', '',
+    ...(pages && pages.length ? ['## Confluence pages', ...pages.map((p) => `- ${oneLine(p.title)} — ${oneLine(p.url)}`), ''] : []),
     `## Comments (${heading})`, ...(blocks.length ? [blocks.join('\n\n')] : []),
   ].join('\n') + '\n';
+}
+
+function ensureDir(d) { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); fs.chmodSync(d, 0o700); }
+/** Writes text to file (inside dir) through a temp file and a rename, directories 700, file 600. */
+function atomicWrite(dir, file, text) {
+  ensureDir(dir); ensureDir(path.dirname(file));
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  fs.writeFileSync(tmp, text, { mode: 0o600 }); fs.chmodSync(tmp, 0o600);
+  fs.renameSync(tmp, file);
 }
 
 /** @param enabled() whether files are written at all (setting jay.agentFiles) */
@@ -70,22 +80,16 @@ function createMirror({ dir, enabled = () => true, browseUrl }) {
   const fileFor = (key) => path.join(issuesDir, `${safeKey(key)}.jira`);
   let current = null;
 
-  function ensureDir(d) { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); fs.chmodSync(d, 0o700); }
-  function atomic(file, text) {
-    ensureDir(dir); ensureDir(path.dirname(file));
-    const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
-    fs.writeFileSync(tmp, text, { mode: 0o600 }); fs.chmodSync(tmp, 0o600);
-    fs.renameSync(tmp, file);
-  }
+  const atomic = (file, text) => atomicWrite(dir, file, text);
   /** Whether current.jira still shows this ticket: another window may have taken it since. */
   function stillOurs(key) {
     try { return fs.readFileSync(path.join(dir, 'current.jira'), 'utf8').split('\n', 3).includes(`# ${browseUrl(key)}`); } catch (_) { return true; }
   }
 
-  function write(issue, comments, total, chain) {
+  function write(issue, comments, total, chain, pages) {
     if (!enabled()) return null;
     const file = fileFor(issue.key);
-    const text = formatIssue(issue, comments, total, chain, browseUrl);
+    const text = formatIssue(issue, comments, total, chain, browseUrl, pages);
     atomic(file, text);
     if (current === file && stillOurs(issue.key)) atomic(path.join(dir, 'current.jira'), text);
     return file;
@@ -121,4 +125,4 @@ function createMirror({ dir, enabled = () => true, browseUrl }) {
   };
 }
 
-module.exports = { createMirror, formatIssue, stamp };
+module.exports = { createMirror, formatIssue, stamp, oneLine, atomic: atomicWrite };

@@ -1,0 +1,46 @@
+{
+ "results": [
+  {
+   "id": "5001",
+   "status": "current",
+   "title": "",
+   "pageId": "1001",
+   "version": {
+    "number": 2,
+    "message": "",
+    "minorEdit": false,
+    "authorId": "acc-bo",
+    "createdAt": "2026-11-02T10:00:00.000Z"
+   },
+   "body": {
+    "atlas_doc_format": {
+     "representation": "atlas_doc_format",
+     "value": "{\"version\":1,\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"note 5001\"}]}]}"
+    }
+   }
+  },
+  {
+   "id": "5002",
+   "status": "current",
+   "title": "",
+   "pageId": "1001",
+   "version": {
+    "number": 2,
+    "message": "",
+    "minorEdit": false,
+    "authorId": "acc-me",
+    "createdAt": "2026-11-03T10:00:00.000Z"
+   },
+   "body": {
+    "atlas_doc_format": {
+     "representation": "atlas_doc_format",
+     "value": "{\"version\":1,\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"note 5002\"}]}]}"
+    }
+   }
+  }
+ ],
+ "_links": {
+  "next": "/wiki/api/v2/pages/1001/footer-comments?cursor=FC2&limit=100",
+  "base": "https://example.atlassian.net/wiki"
+ }
+}

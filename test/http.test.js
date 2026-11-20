@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test'); const assert = require('node:assert');
 const { SignInNeeded } = require('../src/auth');
-const { JiraError, Offline, Timeout, createHttp } = require('../src/http');
+const { JiraError, ConfluenceUnavailable, Offline, Timeout, createHttp } = require('../src/http');
 
 const json = (status, body, headers = {}) => new Response(body === null ? null : JSON.stringify(body), { status, headers });
 function fake(responses) {
@@ -95,4 +95,40 @@ test('get with refresh false: a 401 is a plain JiraError, with no refresh and no
   const ok = fake([json(200, { values: [] })]);
   assert.deepStrictEqual(await createHttp({ auth: mkAuth(), fetch: ok.fetch }).get('/x', { a: 1 }, { refresh: false }), { values: [] });
   assert.ok(ok.calls[0].url.endsWith('/x?a=1'));
+});
+
+const WIKI = 'https://example.atlassian.net/wiki';
+test('a Confluence 401 after one refresh is ConfluenceUnavailable, not SignInNeeded', async () => {
+  const f = fake([json(401, {}), json(401, {})]); let n = 0;
+  const h = createHttp({ auth: mkAuth({ onUnauthorized: async () => { n++; return true; } }), fetch: f.fetch, base: () => WIKI, product: 'Confluence', unavailableOn401: true });
+  await assert.rejects(() => h.get('/api/v2/spaces'), (e) => e instanceof ConfluenceUnavailable && e.name === 'ConfluenceUnavailable' && e.status === 401 && !(e instanceof SignInNeeded));
+  assert.strictEqual(f.calls.length, 2); assert.strictEqual(n, 1);
+});
+test('unavailableOn401 with onUnauthorized false is ConfluenceUnavailable without a retry', async () => {
+  const f = fake([json(401, {})]);
+  const h = createHttp({ auth: mkAuth({ onUnauthorized: async () => false }), fetch: f.fetch, unavailableOn401: true });
+  await assert.rejects(() => h.get('/x'), ConfluenceUnavailable);
+  assert.strictEqual(f.calls.length, 1);
+});
+test('unavailableOn401: a refresh that works retries once; SignInNeeded from onUnauthorized propagates', async () => {
+  const f = fake([json(401, {}), json(200, { ok: 1 })]);
+  assert.deepStrictEqual(await createHttp({ auth: mkAuth(), fetch: f.fetch, unavailableOn401: true }).get('/x'), { ok: 1 });
+  const boom = () => { throw new SignInNeeded('refreshFailed'); };
+  const g = fake([json(401, {})]);
+  await assert.rejects(() => createHttp({ auth: mkAuth({ onUnauthorized: boom }), fetch: g.fetch, unavailableOn401: true }).get('/x'), (e) => e instanceof SignInNeeded && e.reason === 'refreshFailed');
+});
+test('Confluence error bodies become messages', async () => {
+  const h = (r) => createHttp({ auth: mkAuth(), fetch: fake([r]).fetch, product: 'Confluence' });
+  await assert.rejects(() => h(json(400, { errors: [{ title: 'Bad ADF', detail: 'paragraph' }] })).get('/x'), (e) => e instanceof JiraError && e.status === 400 && e.messages.length === 1 && e.messages[0] === 'Bad ADF: paragraph');
+  await assert.rejects(() => h(json(409, { message: 'Version conflict' })).get('/x'), (e) => e.status === 409 && e.messages[0] === 'Version conflict' && e.messages.length === 1);
+  await assert.rejects(() => h(json(400, { errors: [{ title: 'Only title' }] })).get('/x'), (e) => e.messages[0] === 'Only title');
+});
+test('base and product: the wiki base is used and the empty-body message names Confluence', async () => {
+  const f = fake([new Response('', { status: 500 })]);
+  const h = createHttp({ auth: mkAuth(), fetch: f.fetch, base: () => WIKI, product: 'Confluence' });
+  await assert.rejects(() => h.get('/api/v2/spaces', { limit: 1 }), (e) => e instanceof JiraError && e.message === 'Confluence returned 500');
+  assert.strictEqual(f.calls[0].url, WIKI + '/api/v2/spaces?limit=1');
+});
+test("ConfluenceUnavailable's message is the spec's copy", () => {
+  assert.strictEqual(new ConfluenceUnavailable().message, "Confluence isn't available with this sign-in");
 });

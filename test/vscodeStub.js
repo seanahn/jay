@@ -20,7 +20,7 @@ function fakeWebview() {
 }
 
 function install() {
-  const ui = { providers: {}, panels: [], commands: {}, executed: [], opened: [], focused: true, config: {}, workspaceConfig: {}, out: [], watchers: [], infos: [], copied: [], sessions: [], inputs: [], inputOptions: [], editors: {}, tab: null };
+  const ui = { providers: {}, serializers: {}, panels: [], commands: {}, executed: [], opened: [], focused: true, config: {}, workspaceConfig: {}, out: [], watchers: [], infos: [], copied: [], sessions: [], inputs: [], inputOptions: [], editors: {}, tab: null };
   const configChange = new Emitter();
   // the editor's Microsoft provider: ui.session(scopes, options) answers getSession; calls are recorded
   ui.session = () => undefined;
@@ -57,7 +57,7 @@ function install() {
       get state() { return { focused: ui.focused }; },
       onDidChangeWindowState: windowState.event,
       registerWebviewViewProvider: (id, provider) => { ui.providers[id] = provider; return { dispose() {} }; },
-      registerWebviewPanelSerializer: (id, s) => { ui.serializer = s; return { dispose() {} }; },
+      registerWebviewPanelSerializer: (id, s) => { ui.serializers[id] = s; ui.serializer = s; return { dispose() {} }; },
       createWebviewPanel,
       tabGroups,
       registerCustomEditorProvider: (viewType, provider, options) => { ui.editors[viewType] = { provider, options }; return { dispose() {} }; },

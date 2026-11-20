@@ -47,7 +47,7 @@ test('toText of adf-rich', () => {
     '[panel: Heads up]',
     '[expand: More details]',
     '[image]',
-    '[extension]',
+    '[macro: demo]',
     '[futureNode]',
     'Tail',
   ].join('\n\n');

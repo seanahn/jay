@@ -1,0 +1,33 @@
+{
+ "id": "1001",
+ "title": "Demo Home",
+ "status": "current",
+ "spaceId": "2001",
+ "parentId": "1000",
+ "parentType": "page",
+ "position": 0,
+ "authorId": "acc-me",
+ "ownerId": "acc-me",
+ "lastOwnerId": "acc-me",
+ "createdAt": "2025-01-02T03:04:05.000Z",
+ "version": {
+  "number": 12,
+  "message": "",
+  "minorEdit": false,
+  "authorId": "acc-bo",
+  "createdAt": "2026-11-01T10:00:00.000Z"
+ },
+ "body": {
+  "atlas_doc_format": {
+   "representation": "atlas_doc_format",
+   "value": "{\"version\":1,\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Hello from DEMO\"}]}]}"
+  }
+ },
+ "_links": {
+  "webui": "/spaces/DEMO/pages/1001/Demo+Home",
+  "editui": "/pages/resumedraft.action?draftId=1001",
+  "edituiv2": "/spaces/DEMO/pages/edit-v2/1001",
+  "tinyui": "/x/AbCd",
+  "base": "https://example.atlassian.net/wiki"
+ }
+}

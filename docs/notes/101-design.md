@@ -11,6 +11,8 @@ included, on 2026-11-19.
 
 For installing and using jay, see the [README](../../README.md).
 
+Confluence is designed in [102](102-confluence.md).
+
 The plan (docs/superpowers/plans/2026-11-19-jay-v1.md) was deleted when the work was finished.
 
 ## Purpose

@@ -1,0 +1,20 @@
+/* The Confluence page tab, on top of ticket.css (shared buttons, banner, path, editor and ProseMirror rules). */
+.path .space { opacity: 0.8; }
+.headline .kind { opacity: 0.75; }
+.headline .open-confluence { margin-left: auto; }
+.byline { opacity: 0.75; font-size: 0.9em; margin-bottom: 6px; }
+.read-only { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.read-only-note { opacity: 0.8; }
+.page-body { margin-top: 12px; }
+.page-body > .page-edit { float: right; }
+.confluence-now { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--vscode-panel-border); }
+.confluence-now summary { cursor: pointer; font-weight: 600; }
+.theirs-title { font-size: 1.2em; margin: 6px 0; }
+.page-comments .comment.reply { margin-left: 24px; }
+.page-comments .comment.target { background: var(--vscode-editor-inactiveSelectionBackground); }
+.page-comments .quote { border-left: 3px solid var(--vscode-textBlockQuote-border); margin: 10px 0 0; padding-left: 10px; opacity: 0.8; }
+.page-comments .resolved { opacity: 0.75; font-style: italic; }
+.page-comments .comment-reply, .page-comments .comment-edit { margin: 6px 0 6px 24px; }
+.page-comments .reply-btn { margin: 4px 0 4px 24px; }
+.page-comments .new-comment { margin-top: 14px; }
+.page-comments .comments-list .comments-title { margin-top: 16px; }

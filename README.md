@@ -63,6 +63,30 @@ jay works with Jira Cloud only. There are three ways to sign in:
 The tree is cached, so it shows at once when the window opens, then
 refreshes in the background.
 
+## Confluence
+
+jay also shows Confluence, with the same sign-in. A `Jira | Confluence`
+switch at the top of the sidebar picks the side. The Confluence side has
+a search box, a space box, your mentions, your pages and the space's page
+tree. Clicking a page opens it as a tab, where you can read it, edit it
+and comment, for example on `https://example.atlassian.net/wiki/spaces/ENG/pages/12345`.
+
+The page in front is written to `~/.jay/current.confluence`. To let an
+agent use it, add a line like this to your CLAUDE.md:
+
+```
+- Confluence: when I say "this page" without a link, read ~/.jay/current.confluence (written by jay); change Confluence only when I say so.
+```
+
+Set `jay.confluence.enabled` to `false` to hide the switch and stop
+polling for mentions. With an OAuth token file, the login that wrote it
+must have granted Confluence's granular scopes (such as
+`read:page:confluence`), and saved them as `scope` in the file; without
+them the Confluence side says "This sign-in can't use Confluence yet".
+Jira is unaffected.
+
+Design and rulings: [docs/notes/102-confluence.md](docs/notes/102-confluence.md).
+
 ## Periods
 
 `jay.period` chooses what the period picker lists.
@@ -199,6 +223,7 @@ all of these. jay never writes a token file.
 | `jay.columns` | `["key", "summary", "assignee", "status"]` | Row columns, in order; also `type`, `priority`, `due`, `labels`, `estimate` |
 | `jay.ticketView` | `atlassian` | What a click opens: `atlassian`, the Atlassian extension's issue page (jay's tab if it isn't installed or fails), or `jay`, jay's own tab |
 | `jay.agentFiles` | `true` | Write each open ticket to `~/.jay` for an agent |
+| `jay.confluence.enabled` | `true` | Show the Jira \| Confluence switch and poll Confluence mentions |
 
 `jay.site`, `jay.signIn.tokenFile` and `jay.signIn.refreshCommand` are read only from your user settings (or the remote's settings in a remote window); a workspace's `.vscode/settings.json` can't change them.
 

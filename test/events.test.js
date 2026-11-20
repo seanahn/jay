@@ -204,3 +204,26 @@ test('description: an old mention never lights; one added after the baseline doe
   ev.observe({ key: 'DEMO-3', description: mentioning, updated: iso(T0 + 100000) }, [], mineOf());   // changed since the baseline
   assert.strictEqual(ev.state('DEMO-3').mention, false);
 });
+
+test('the confluence section: known is a union, lit and seen take the max, and the earliest baseline wins', () => {
+  const file = tmp(); const clock = { t: T0 };
+  const mk = () => createEvents({ file, now: () => clock.t });
+  const a = mk(); const b = mk();
+  Object.assign(a.conf(), { baseline: T0, known: { 1001: T0 }, lit: { 1001: T0 + 10 }, seen: {} }); a.save();
+  const cb = b.conf();
+  assert.strictEqual(cb.baseline, T0, 'merged from disk on access');
+  cb.known['1002'] = T0 + 5; cb.lit['1002'] = T0 + 5; cb.seen['1001'] = T0 + 20; b.save();
+  a.conf().lit['1001'] = T0 + 10; a.save();
+  const c = mk().conf();
+  assert.deepStrictEqual(Object.keys(c.known).sort(), ['1001', '1002']);
+  assert.strictEqual(c.seen['1001'], T0 + 20, "b's clear survives a's later save");
+  assert.strictEqual(c.lit['1002'], T0 + 5);
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepStrictEqual(Object.keys(raw).sort(), ['confluence', 'newEpics', 'tickets', 'views']);
+  assert.strictEqual(a.badge(), 0, "the Jira badge doesn't count Confluence");
+});
+
+test('a seen.json without a confluence section starts one with no baseline', () => {
+  const { ev } = make();
+  assert.deepStrictEqual(ev.conf(), { baseline: null, known: {}, lit: {}, seen: {} });
+});

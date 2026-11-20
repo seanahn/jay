@@ -5,6 +5,7 @@
 // through one TicketTab, given { webview, onDidDispose, onDidChangeViewState, reveal } and the panel's view state.
 const crypto = require('crypto');
 const { chainOf } = require('./tree');
+const { confluenceLinksIn, parsePageUrl } = require('./pageLinks');
 
 const VIEW_TYPE = 'jay.ticket';
 // A Jira issue key: the one pattern jay uses (the host here and in extension.js; media/sidebar.js keeps a copy)
@@ -12,6 +13,8 @@ const KEY_RE = /^[A-Z][A-Z0-9_]+-\d+$/;
 const TEXT_FIELDS = new Set(['summary', 'description']);
 const SET_FIELDS = new Set(['assignee', 'priority', 'duedate', 'labels']);
 const MAX_PARENTS = 10;
+// What confluenceSide.js's proxy throws (a SignInNeeded) while Confluence isn't ready: not worth a log line
+const CONFLUENCE_WAIT = 'confluenceWait';
 const messageOf = (e) => (e && Array.isArray(e.messages) && e.messages.length ? e.messages.join('; ') : (e && e.message) || 'Could not load this ticket');
 // The op a write message's result is reported under.
 const OP_OF = {
@@ -46,7 +49,7 @@ class TicketTab {
     const { issue, chain } = got;
     this.issue = issue; this.comments = got.comments; this.total = got.total;
     this.loaded = true; this.reread = false;
-    this.post({ type: 'render', issue, comments: this.comments, total: this.total, path: chain.path.map(crumb), me: this.owner.me, priorities, browseUrl: api.browseUrl(this.key) });
+    this.post({ type: 'render', issue, comments: this.comments, total: this.total, pages: got.pages, path: chain.path.map(crumb), me: this.owner.me, priorities, browseUrl: api.browseUrl(this.key) });
     const file = this.owner.mirrorTicket(got);
     // opening counts as seen; new content later only while Sean can see it: the tab visible in the focused window
     if (first || (this.shell.isVisible() && this.owner.isFocused())) this.owner.markSeen(this.key);
@@ -103,6 +106,13 @@ class TicketTab {
         await this.owner.vscode.env.openExternal(this.owner.vscode.Uri.parse(url));
         return;
       }
+      case 'openPage': {
+        if (typeof m.url !== 'string' || !/^https:\/\//i.test(m.url)) return;
+        let done = false;
+        try { done = !!(this.owner.openPage && await this.owner.openPage(m.url)); } catch (e) { this.owner.log(e); }
+        if (!done) await this.owner.vscode.env.openExternal(this.owner.vscode.Uri.parse(m.url));
+        return;
+      }
       case 'getTransitions': {
         try { this.transitionList = await api.transitions(key); this.post({ type: 'transitions', list: this.transitionList }); }
         catch (e) { this.owner.log(e); this.post({ type: 'transitions', list: [], error: messageOf(e) }); }
@@ -152,6 +162,7 @@ class TicketTab {
  * @param o.getIndex()   the loader's issues by key (may be empty)
  * @param o.me           { accountId, displayName }
  * @param o.isFocused()  whether this window has focus
+ * @param o.confluence, o.siteUrl(), o.openPage(url)  optional (design 102): the Confluence api, the site, and the page-tab opener (a boolean)
  * @param o.keepFile(key) optional: true when another view still shows key, so closing jay's tab keeps its file
  */
 function createTickets(o) {
@@ -160,6 +171,7 @@ function createTickets(o) {
   let prioritiesP = null;
   const owner = {
     vscode, api: o.api, writer: o.writer, mirror: o.mirror, me: o.me, front: null,
+    openPage: o.openPage,
     isFocused: () => (o.isFocused ? o.isFocused() : vscode.window.state.focused),
     log: o.log || (() => {}),
     open,
@@ -194,10 +206,46 @@ function createTickets(o) {
       const { comments, total } = await o.api.comments(key);
       const chain = await owner.chainFor(issue);
       const cs = comments || [];
-      return { issue, comments: cs, total: total == null ? cs.length : total, chain };
+      const pages = await owner.pagesFor(issue, cs);
+      return { issue, comments: cs, total: total == null ? cs.length : total, chain, pages };
+    },
+    /**
+     * The Confluence pages the ticket references, [{ url, title }]: links in the description and the loaded comments, then
+     * remote links; deduped by page id. Titles: a remote link's (even when the page is also linked in the text), else one
+     * Confluence titles() read for the rest, else the URL. Nothing here fails the ticket load; while Confluence isn't ready
+     * the read fails at once and nothing is logged. Empty when the Confluence options are absent.
+     */
+    async pagesFor(issue, comments) {
+      const site = o.siteUrl && o.siteUrl();
+      if (!site) return [];
+      let remote = [];
+      try { remote = ((await o.api.remoteLinks(issue.key)) || []).filter((l) => l && typeof l.url === 'string'); } catch (e) { owner.log(e); }
+      const remoteTitle = new Map();   // page id -> the first remote link's title
+      for (const l of remote) {
+        const hit = parsePageUrl(l.url, site);
+        if (hit && !remoteTitle.has(hit.pageId) && l.title && l.title !== l.url) remoteTitle.set(hit.pageId, l.title);
+      }
+      const found = [];   // { url, id, title }
+      const seen = new Set();
+      const add = (url) => {
+        const hit = parsePageUrl(url, site);
+        if (!hit || seen.has(hit.pageId)) return;
+        seen.add(hit.pageId);
+        found.push({ url, id: hit.pageId, title: remoteTitle.get(hit.pageId) || null });
+      };
+      for (const adf of [issue.description, ...comments.map((c) => c.body)]) for (const u of confluenceLinksIn(adf, site)) add(u);
+      for (const l of remote) add(l.url);
+      const untitled = found.filter((f) => !f.title).map((f) => f.id);
+      if (untitled.length && o.confluence) {
+        try {
+          const titles = await o.confluence.titles(untitled);
+          for (const f of found) if (!f.title && titles && titles.get(f.id)) f.title = titles.get(f.id);
+        } catch (e) { if (!(e && e.name === 'SignInNeeded' && e.reason === CONFLUENCE_WAIT)) owner.log(e); }
+      }
+      return found.map((f) => ({ url: f.url, title: f.title || f.url }));
     },
     /** Writes what fetchTicket returned to ~/.jay/issues/<KEY>.jira; the file, or null with agent files off. */
-    mirrorTicket(got) { return o.mirror.write(got.issue, got.comments, got.total, got.chain); },
+    mirrorTicket(got) { return o.mirror.write(got.issue, got.comments, got.total, got.chain, got.pages); },
     viewChanged(tab) {
       if (!tab.shell.isActive()) return;
       owner.front = tab;

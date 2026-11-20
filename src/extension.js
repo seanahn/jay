@@ -16,6 +16,7 @@ const { createTickets, KEY_RE } = require('./ticket');
 const { createAtlassianView } = require('./atlassian');
 const { Sidebar } = require('./sidebar');
 const { createPoller } = require('./poller');
+const { createConfluenceSide } = require('./confluenceSide');
 
 const TREE_MS = 60000;
 const TAB_MS = 30000;
@@ -93,7 +94,8 @@ function activate(context, deps = {}) {
   // jay.lastSession's projects are this sign-in's
   const s = { gen: 0, auth: null, api: null, writer: null, me: null, session: null, projects: [], projectsStale: false, account: null,
     projectsLoad: null, projectsLoaded: false, fingerprint: null, trusted: null, remembered: false,
-    running: false, starting: false, error: null, notes: {}, view: null, fresh: false, mineKeys: new Set(), mineOkAt: null, events: null, cleared: false };
+    running: false, starting: false, error: null, notes: {}, view: null, fresh: false, mineKeys: new Set(), mineOkAt: null, events: null, cleared: false,
+    conf: null };   // conf: this sign-in's Confluence (confluenceSide.js), or null
   const note = () => { for (const k of NOTE_POLLS) { const n = s.notes[k]; if (n && (n.offline || n.throttle)) return n.offline || n.throttle; } return null; };
   const setNote = (poll, kind, text) => { const n = s.notes[poll] || (s.notes[poll] = {}); if (n[kind] === text) return; n[kind] = text; render(); };
   const me = { accountId: null, displayName: null };   // the tabs hold this object; it is filled in at each sign-in
@@ -109,10 +111,16 @@ function activate(context, deps = {}) {
   const mirror = createMirror({ dir: jayDir, enabled: () => cfg('agentFiles', true) !== false, browseUrl: (k) => apiRef.browseUrl(k) });
   const periods = createPeriods({ api: apiRef, store, cfg, now });
   const tickets = createTickets({ vscode, extensionUri: context.extensionUri, api: apiRef, writer: writerRef, mirror, events: eventsRef,
-    getIndex: () => (s.view ? s.view.index : new Map()), me, isFocused, log, keepFile: (k) => atlassian.keeps(k) });
+    getIndex: () => (s.view ? s.view.index : new Map()), me, isFocused, log, keepFile: (k) => atlassian.keeps(k),
+    // Confluence is created below; these reach it lazily (design 102, "In Jira tickets")
+    confluence: new Proxy({}, { get: (_, k) => (...a) => conf.confluence[k](...a) }), siteUrl: () => conf.siteUrl(), openPage: (u) => conf.openPage(u) });
   // jay.ticketView: the one way a click in the sidebar opens a ticket (design 101, "Which view opens a ticket")
   const atlassian = createAtlassianView({ vscode, tickets, mirror, view: () => cfg('ticketView', 'atlassian'),
     markSeen: (k) => { eventsRef.seen(k); eventsRef.save(); }, isFocused, log, now });
+  // Confluence (design 102): the page tabs, tree, Mentions and My pages, with pollers of their own
+  const conf = createConfluenceSide({ vscode, extensionUri: context.extensionUri, s, me, store, cfg, sidebar, fetch: fetchFn, jayDir, now, isFocused,
+    timers: deps.timers, log, render: () => render(), needSignIn: (r) => needSignIn(r), signedOutElsewhere: () => signedOutElsewhere(),
+    ensureSession: () => ensureSession(), searchUsers: (q) => apiRef.users(q) });
 
   /** The 5 most recently picked project keys, newest first (globalState jay.recentProjects). */
   const recentProjects = () => { const r = store.get('jay.recentProjects'); return Array.isArray(r) ? r.filter((k) => typeof k === 'string').slice(0, 5) : []; };
@@ -149,14 +157,15 @@ function activate(context, deps = {}) {
       n.children.forEach(mark);
     };
     if (s.events && v) for (const g of tree.groups) g.nodes.forEach(mark);
+    const account = !s.running && !s.starting ? null : s.me ? `Signed in as ${s.me.emailAddress || (s.auth.email && s.auth.email()) || s.me.displayName} (${s.auth.describe()})` : 'Signing in…';
     sidebar.update({
-      signedIn: s.running || s.starting, error: s.error, note: note(),
-      account: !s.running && !s.starting ? null : s.me ? `Signed in as ${s.me.emailAddress || (s.auth.email && s.auth.email()) || s.me.displayName} (${s.auth.describe()})` : 'Signing in…',
+      signedIn: s.running || s.starting, error: s.error, note: note(), account,
       // quarters/quarter: the period picker's choices and value, whatever the period kind
       projects: s.projects, project: c.project, recentProjects: recentProjects(), quarters: c.choices, quarter: c.id, periodKind: c.kind, periodNote: c.note,
       mode: c.mode, groups: tree.groups, events, columns: columns(), loading: !!(s.running && c.project && !c.period), treeLoading,
+      ...conf.state(account),
     });
-    sidebar.setBadge(s.events && s.me ? s.events.badge() : 0);
+    sidebar.setBadge((s.events && s.me ? s.events.badge() : 0) + conf.badge());
   }
 
   /** The cached view for key, only if the account jay trusts wrote it (none trusted yet: none shown). */
@@ -192,6 +201,7 @@ function activate(context, deps = {}) {
   function becomeAccount(accountId) {
     if (s.account && s.account !== accountId) {
       Object.assign(s, { view: null, fresh: false, mineKeys: new Set(), mineOkAt: null, events: createEvents({ file: path.join(jayDir, 'seen.json'), now }) });
+      conf.forget();
     }
     s.account = accountId;
   }
@@ -208,6 +218,7 @@ function activate(context, deps = {}) {
         becomeAccount(who.accountId);
         s.me = who; Object.assign(me, who); s.trusted = who.accountId;
         s.writer = createWriter({ api, meId: who.accountId, now });
+        conf.onSession(who);
         const projects = s.projectsLoaded ? s.projects : s.remembered ? lastProjects() : [];
         store.update(LAST_SESSION, { fingerprint: s.fingerprint, accountId: who.accountId, displayName: who.displayName || null, emailAddress: who.emailAddress || null,
           projects: projects.map((x) => ({ key: x.key, name: x.name })) });
@@ -240,7 +251,7 @@ function activate(context, deps = {}) {
     });
   }
 
-  function stopAll() { s.gen++; for (const p of pollers) p.stop(); stopFileCheck(); }
+  function stopAll() { s.gen++; for (const p of pollers) p.stop(); conf.stop(); stopFileCheck(); }
 
   /** Builds the sign-in from the settings and secrets, and polls if there is one. */
   async function restart() {
@@ -249,7 +260,7 @@ function activate(context, deps = {}) {
     const g0 = s.gen;
     // nothing of the last sign-in shows until this one says who it is
     Object.assign(s, { running: false, starting: true, auth: null, api: null, writer: null, me: null, session: null, error: null, notes: {}, view: null, fresh: false,
-      projects: [], trusted: null, remembered: false });
+      projects: [], trusted: null, remembered: false, conf: null });
     Object.assign(me, { accountId: null, displayName: null });
     render();
     watchTokenFile();
@@ -259,6 +270,7 @@ function activate(context, deps = {}) {
     s.starting = false;
     if (!auth) { s.error = userOut() ? null : signInText('none'); render(); startFileCheck(); return; }
     s.auth = auth; s.api = createApi(createHttp({ auth, fetch: fetchFn }), auth); s.cleared = false;
+    conf.build(auth);
     Object.assign(s, { fingerprint, projectsLoad: null, projectsLoaded: false, projectsStale: false });
     if (!s.events) s.events = createEvents({ file: path.join(jayDir, 'seen.json'), now });
     // the same sign-in as last time: show who it was, its projects and the cached tree now; myself() confirms it in the background
@@ -273,6 +285,7 @@ function activate(context, deps = {}) {
     s.running = true;
     render();
     for (const p of pollers) p.start();
+    conf.start();
   }
 
   function needSignIn(reason) {
@@ -356,7 +369,7 @@ function activate(context, deps = {}) {
   function signOutHere() {
     // stop everything that could write under ~/.jay first, so nothing re-creates a file once it is cleared
     stopAll();
-    tickets.disposeAll(); atlassian.clear();
+    tickets.disposeAll(); atlassian.clear(); conf.signOut();
     Object.assign(s, { running: false, starting: false, auth: null, api: null, writer: null, me: null, session: null, events: null, view: null, fresh: false,
       projects: [], trusted: null, remembered: false, mineKeys: new Set(), mineOkAt: null, error: null, notes: {}, cleared: true });
     Object.assign(me, { accountId: null, displayName: null });
@@ -379,7 +392,7 @@ function activate(context, deps = {}) {
   /** After an await: false if the poll belongs to an older sign-in (and, after a sign-out, wipes what it may have cached). */
   function live(g0) {
     if (g0 === s.gen) return true;
-    if (s.cleared) mirror.clearAll();
+    if (s.cleared) { mirror.clearAll(); conf.wipe(); }
     return false;
   }
   const mineOf = (issues) => issues.filter((i) => i.assignee && i.assignee.accountId === me.accountId).map((i) => i.key);
@@ -502,6 +515,7 @@ function activate(context, deps = {}) {
     || (!s.projectsLoaded && ((s.remembered && lastProjects().some((p) => p.key === key)) || key === store.get('jay.project'))));
 
   sidebar.onMessage((m) => {
+    if (conf.message(m)) return;
     if (m.type === 'signIn') { signIn().catch(log); return; }
     if (m.type === 'open') {
       const key = typeof m.key === 'string' ? m.key.trim().toUpperCase() : '';
@@ -522,12 +536,14 @@ function activate(context, deps = {}) {
     if (e.affectsConfiguration('jay.quarter') || e.affectsConfiguration('jay.period')) { s.fresh = false; switchView(); }
     if (e.affectsConfiguration('jay.placeholderAssignees') || e.affectsConfiguration('jay.columns')) render();
     if (e.affectsConfiguration('jay.agentFiles') && cfg('agentFiles', true) === false) mirror.clearFiles();
+    conf.settings(e);
   }
 
   async function refresh() {
     if (!s.running) { if (!userOut()) await restart(); return; }
     s.projectsStale = true; periods.markStale();
     for (const p of pollers) p.kick();
+    conf.kick(true);
   }
 
   function dispose() {
@@ -536,12 +552,12 @@ function activate(context, deps = {}) {
     watcher = null;
     stopFileCheck();
     // the tabs stay: VS Code disposes the panels itself, and the serializer restores them after a reload
-    tickets.dispose(); atlassian.dispose();
+    tickets.dispose(); atlassian.dispose(); conf.dispose();
   }
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('jay.sidebar', sidebar, { webviewOptions: { retainContextWhenHidden: true } }),
-    vscode.window.onDidChangeWindowState((w) => { if (w.focused) for (const p of pollers) p.kick(); }),
+    vscode.window.onDidChangeWindowState((w) => { if (w.focused) { for (const p of pollers) p.kick(); conf.kick(false); } }),
     vscode.workspace.onDidChangeConfiguration(onSettings),
     // Sign Out in another window deletes the shared secrets after setting the flag
     secrets.onDidChange((e) => { if (e && (e.key === 'jay.email' || e.key === 'jay.apiToken')) signedOutElsewhere(); }),
@@ -558,9 +574,14 @@ function activate(context, deps = {}) {
       return true;
     }),
     vscode.commands.registerCommand('jay.projectKeys', () => (s.running ? (s.projectsLoaded ? s.projects : s.remembered ? lastProjects() : []).map((p) => p.key) : [])),
+    // for perch: open a Confluence link in jay (false: open the browser), which links are jay's, and the page in front's file
+    vscode.commands.registerCommand('jay.openPage', (url) => conf.openPage(url)),
+    vscode.commands.registerCommand('jay.siteUrl', () => conf.siteUrl()),
+    vscode.commands.registerCommand('jay.activePageFile', () => conf.activePageFile()),
     out,
   );
 
+  conf.title();
   render();
   restart().catch(log);
   current = { dispose, state: s, pollers };

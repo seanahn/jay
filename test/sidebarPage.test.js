@@ -546,3 +546,267 @@ test('search results are not stripped', () => {
   results(p, 1, [item('OTH-7', 'Acme Portal: threat model')]);
   assert.strictEqual(jiraRows(p)[0].querySelector('.col-summary').textContent, 'Acme Portal: threat model');
 });
+
+// ---- the Confluence side (notes/102 "The sidebar")
+const citem = (id, kind, title, o) => Object.assign({ id, kind, title, parentId: null, children: [], childrenLoaded: true, hasMore: false }, o);
+const confData = (o) => Object.assign({
+  account: 'Signed in as Ann', note: null,
+  spaces: [{ key: 'DEMO', name: 'Demo space', type: 'global' }, { key: 'OPS', name: 'Operations', type: 'global' }, { key: '~ann', name: 'Ann Example', type: 'personal' }],
+  space: { key: 'DEMO', name: 'Demo space' }, recentSpaces: ['OPS'],
+  roots: ['1001', '1002', '1003'], rootsHasMore: false,
+  items: {
+    1001: citem('1001', 'page', 'Handbook', { children: ['1004'] }),
+    1004: citem('1004', 'page', 'Onboarding', { parentId: '1001', childrenLoaded: false }),
+    1002: citem('1002', 'folder', 'Designs', { children: ['1005'] }),
+    1005: citem('1005', 'whiteboard', 'Sketch wall', { parentId: '1002' }),
+    1003: citem('1003', 'page', 'Roadmap', { childrenLoaded: false }),
+  },
+  mentions: [], mine: { items: [], hasMore: false }, open: { mine: false, tree: true }, loading: { spaces: false, tree: false, mine: false },
+}, o);
+const cstate = (c, o) => state(Object.assign({ side: 'confluence', confluenceEnabled: true, conf: confData(c) }, o));
+const ctree = (p) => p.d.querySelector('.conf-tree');
+const crows = (p) => [...ctree(p).querySelectorAll('.row[data-id]')].map((r) => r.dataset.id);
+const crow = (p, id) => ctree(p).querySelector(`.row[data-id="${id}"]`);
+const csearch = (p, text) => { const i = p.d.querySelector('input.conf-search'); i.value = text; i.dispatchEvent(new p.w.Event('input', { bubbles: true })); };
+const sent = (p, type) => p.posted.filter((m) => m.type === type);
+
+test('switch: shown above the account line when Confluence is on, aria-pressed on the current side, a click posts setSide', () => {
+  const p = page(); p.send(state({ side: 'jira', confluenceEnabled: true, conf: confData() }));
+  const sw = p.d.querySelector('.side-switch');
+  assert.ok(sw && !sw.hidden);
+  assert.strictEqual(sw.compareDocumentPosition(acct(p)) & p.w.Node.DOCUMENT_POSITION_FOLLOWING, p.w.Node.DOCUMENT_POSITION_FOLLOWING);
+  const [j, c] = [...sw.querySelectorAll('button')];
+  assert.deepStrictEqual([j.textContent, c.textContent], ['Jira', 'Confluence']);
+  assert.deepStrictEqual([j.getAttribute('aria-pressed'), c.getAttribute('aria-pressed')], ['true', 'false']);
+  c.click();
+  assert.deepStrictEqual(sent(p, 'setSide'), [{ type: 'setSide', side: 'confluence' }]);
+  p.send(cstate());
+  const [j2, c2] = [...p.d.querySelectorAll('.side-switch button')];
+  assert.deepStrictEqual([j2.getAttribute('aria-pressed'), c2.getAttribute('aria-pressed')], ['false', 'true']);
+  j2.click();
+  assert.deepStrictEqual(sent(p, 'setSide').pop(), { type: 'setSide', side: 'jira' });
+});
+
+test('switch: hidden with Confluence off, and the Jira side shows even when side says confluence', () => {
+  const p = page(); p.send(cstate({}, { confluenceEnabled: false }));
+  const sw = p.d.querySelector('.side-switch');
+  assert.ok(!sw || sw.hidden);
+  assert.deepStrictEqual(keys(p), ['DEMO-1', 'DEMO-2', 'DEMO-3', 'DEMO-4', 'DEMO-5']);
+  assert.ok(!ctree(p) || ctree(p).hidden);
+});
+
+test('regression: the Jira side DOM is unchanged by the Confluence keys', () => {
+  const a = page(); a.send(state());
+  const b = page(); b.send(state({ side: 'jira', confluenceEnabled: false, conf: confData() }));
+  assert.strictEqual(b.d.body.innerHTML, a.d.body.innerHTML);
+  const c = page(); c.send(state({ side: 'jira', confluenceEnabled: true, conf: confData() }));
+  c.d.querySelector('.side-switch').remove();
+  assert.strictEqual(c.d.body.innerHTML, a.d.body.innerHTML);
+  // and back from the Confluence side
+  const e = page(); e.send(cstate()); e.send(state({ side: 'jira', confluenceEnabled: false, conf: confData() }));
+  assert.strictEqual(e.d.body.innerHTML, a.d.body.innerHTML);
+});
+
+test('Confluence side: account line without Mine | All, search, space box, then the sections in order', () => {
+  const p = page(); p.send(cstate({ account: 'Signed in as ann@example.com (API token)', mentions: [{ id: 'm1', pageId: '1001', title: 'Handbook', byName: 'Bo Sample', at: null, lit: true }] }));
+  assert.strictEqual(acct(p).textContent, 'Signed in as ann@example.com (API token)');
+  assert.strictEqual(acct(p).querySelector('.mode-other'), null);
+  assert.ok(p.d.querySelector('.tree:not(.conf-tree)').hidden); assert.ok(p.d.querySelector('.controls:not(.conf-controls)').hidden);
+  const s = p.d.querySelector('input.conf-search'), sp = p.d.querySelector('input.space');
+  assert.strictEqual(s.placeholder, 'Search pages'); assert.strictEqual(sp.placeholder, 'Pick a space');
+  assert.strictEqual(s.compareDocumentPosition(sp) & p.w.Node.DOCUMENT_POSITION_FOLLOWING, p.w.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.strictEqual(sp.value, 'DEMO — Demo space');
+  const heads = [...ctree(p).querySelectorAll('.section')].map((h) => h.textContent.replace(/^[›⌄]/, ''));
+  assert.deepStrictEqual(heads, ['Mentions', 'My pages', 'Demo space']);
+});
+
+test('space box: the shared combobox (roles, Recent first, type-to-filter by key or name, Enter posts setSpace)', () => {
+  const p = page(); p.send(cstate());
+  const sp = p.d.querySelector('input.space'), list = p.d.getElementById(sp.getAttribute('aria-controls'));
+  assert.strictEqual(sp.getAttribute('role'), 'combobox'); assert.strictEqual(list.getAttribute('role'), 'listbox');
+  sp.focus();
+  const o = () => [...list.querySelectorAll('.option')].map((x) => x.dataset.key);
+  assert.deepStrictEqual(o(), ['OPS', 'DEMO', '~ann']);
+  assert.deepStrictEqual([...list.querySelectorAll('.section')].map((h) => h.textContent), ['Recent', 'All spaces']);
+  sp.value = 'ann'; sp.dispatchEvent(new p.w.Event('input'));
+  assert.deepStrictEqual(o(), ['~ann']);
+  sp.value = 'op'; sp.dispatchEvent(new p.w.Event('input'));
+  assert.deepStrictEqual(o(), ['OPS']);
+  sp.dispatchEvent(new p.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.deepStrictEqual(sent(p, 'setSpace'), [{ type: 'setSpace', key: 'OPS' }]);
+  sp.value = 'zzz'; sp.dispatchEvent(new p.w.Event('input'));
+  assert.strictEqual(list.querySelector('.empty').textContent, 'No matching spaces');
+});
+
+test('space box: a stored key before its space loads shows the key; no space asks to pick one', () => {
+  const p = page(); p.send(cstate({ space: { key: 'DEMO', name: null }, spaces: [], roots: [], items: {} }));
+  assert.strictEqual(p.d.querySelector('input.space').value, 'DEMO');
+  p.send(cstate({ space: null, roots: [], items: {} }));
+  assert.ok(ctree(p).textContent.includes('Pick a space'));
+});
+
+test('Mentions: only with mentions; rows pulse, show title and who, and post openMention', () => {
+  const p = page(); p.send(cstate());
+  assert.ok(!ctree(p).textContent.includes('Mentions'));
+  p.send(cstate({ mentions: [{ id: 'm1', pageId: '1001', title: 'Handbook', byName: 'Bo Sample', at: '2026-11-19T10:00:00.000Z', lit: true }] }));
+  const r = ctree(p).querySelector('.row.mention');
+  assert.ok(r.classList.contains('pulse'));
+  assert.ok(r.textContent.includes('Handbook') && r.textContent.includes('Bo Sample'));
+  assert.ok(r.getAttribute('title').includes('Bo Sample'));
+  r.click();
+  assert.deepStrictEqual(sent(p, 'openMention'), [{ type: 'openMention', id: 'm1' }]);
+});
+
+test('My pages: collapsed by default; the header toggles; open lists pages with More', () => {
+  const p = page(); p.send(cstate({ mine: { items: [{ id: '2001', title: 'My notes', spaceKey: 'OPS' }], hasMore: true } }));
+  const head = () => ctree(p).querySelector('.section[data-section="mine"]');
+  assert.strictEqual(head().getAttribute('aria-expanded'), 'false');
+  assert.strictEqual(head().querySelector('.twisty').textContent, '›');
+  assert.strictEqual(crow(p, '2001'), null);
+  head().click();
+  assert.deepStrictEqual(sent(p, 'toggleSection'), [{ type: 'toggleSection', name: 'mine' }]);
+  p.send(cstate({ open: { mine: true, tree: true }, mine: { items: [{ id: '2001', title: 'My notes', spaceKey: 'OPS' }], hasMore: true } }));
+  assert.strictEqual(head().getAttribute('aria-expanded'), 'true'); assert.strictEqual(head().querySelector('.twisty').textContent, '⌄');
+  const r = crow(p, '2001');
+  assert.strictEqual(r.querySelector('.col-title').textContent, 'My notes'); assert.strictEqual(r.querySelector('.col-space').textContent, 'OPS');
+  r.click();
+  assert.deepStrictEqual(sent(p, 'openPage'), [{ type: 'openPage', id: '2001' }]);
+  ctree(p).querySelector('.row.more[data-more="mine"]').click();
+  assert.deepStrictEqual(sent(p, 'moreMine'), [{ type: 'moreMine' }]);
+  head().dispatchEvent(new p.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.strictEqual(sent(p, 'toggleSection').length, 2);
+});
+
+test('page tree: open by default under the space name; rows show the title with a tooltip; the header toggles', () => {
+  const p = page(); p.send(cstate());
+  const head = ctree(p).querySelector('.section[data-section="tree"]');
+  assert.strictEqual(head.getAttribute('aria-expanded'), 'true');
+  assert.deepStrictEqual(crows(p), ['1001', '1002', '1003']);
+  const r = crow(p, '1001');
+  assert.strictEqual(r.querySelector('.col-title').textContent, 'Handbook');
+  assert.ok(r.getAttribute('title').includes('Handbook'));
+  head.click();
+  assert.deepStrictEqual(sent(p, 'toggleSection'), [{ type: 'toggleSection', name: 'tree' }]);
+  p.send(cstate({ open: { mine: false, tree: false } }));
+  assert.deepStrictEqual(crows(p), []);
+});
+
+test('page tree: a twisty on an unloaded item posts expandPage once; a loaded one opens locally and stays open across updates', () => {
+  const p = page(); p.send(cstate());
+  crow(p, '1001').querySelector('.twisty').click();
+  assert.deepStrictEqual(crows(p), ['1001', '1004', '1002', '1003']);
+  assert.deepStrictEqual(sent(p, 'expandPage'), []);
+  assert.ok(crow(p, '1004').getAttribute('title').includes('Handbook'), 'tooltip has the path');
+  crow(p, '1003').querySelector('.twisty').click();
+  assert.deepStrictEqual(sent(p, 'expandPage'), [{ type: 'expandPage', id: '1003' }]);
+  assert.strictEqual(sent(p, 'openPage').length, 0);
+  const items = Object.assign({}, confData().items, { 1003: citem('1003', 'page', 'Roadmap', { children: ['1006'] }), 1006: citem('1006', 'page', 'Q1 plan', { parentId: '1003' }) });
+  p.send(cstate({ items }));
+  assert.deepStrictEqual(crows(p), ['1001', '1004', '1002', '1003', '1006']);
+  assert.strictEqual(crow(p, '1006').querySelector('.twisty').textContent, '', 'a loaded leaf has no twisty');
+});
+
+test('page tree: folders open no tab; pages and other kinds post openPage { id }', () => {
+  const p = page(); p.send(cstate());
+  crow(p, '1002').querySelector('.col-title').click();
+  assert.strictEqual(sent(p, 'openPage').length, 0);
+  assert.ok(crows(p).includes('1005'), 'clicking a folder opens it in the tree');
+  crow(p, '1005').click(); crow(p, '1003').querySelector('.col-title').click();
+  assert.deepStrictEqual(sent(p, 'openPage'), [{ type: 'openPage', id: '1005' }, { type: 'openPage', id: '1003' }]);
+});
+
+test('page tree: More rows post morePages for an item and for the top level', () => {
+  const items = Object.assign({}, confData().items, { 1001: citem('1001', 'page', 'Handbook', { children: ['1004'], hasMore: true }) });
+  const p = page(); p.send(cstate({ items, rootsHasMore: true }));
+  ctree(p).querySelector('.row.more[data-more="root"]').click();
+  crow(p, '1001').querySelector('.twisty').click();
+  ctree(p).querySelector('.row.more[data-more="1001"]').click();
+  assert.deepStrictEqual(sent(p, 'morePages'), [{ type: 'morePages', id: null }, { type: 'morePages', id: '1001' }]);
+});
+
+test('page tree: loading and note', () => {
+  const p = page(); p.send(cstate({ roots: [], items: {}, loading: { spaces: false, tree: true, mine: false }, note: "This sign-in can't use Confluence yet" }));
+  assert.ok(ctree(p).textContent.includes('Loading…'));
+  assert.strictEqual(p.d.querySelector('.note').textContent, "This sign-in can't use Confluence yet");
+  assert.ok(!p.d.querySelector('.note').hidden);
+});
+
+test('search: typing filters loaded titles at once, keeping ancestors', () => {
+  const p = page(); p.send(cstate());
+  csearch(p, 'sketch');
+  assert.deepStrictEqual(crows(p), ['1002', '1005']);
+  csearch(p, '');
+  assert.deepStrictEqual(crows(p), ['1001', '1002', '1003']);
+});
+
+test('search: from 3 characters and 400 ms it posts confSearch; only the latest answer shows under Confluence results', () => {
+  const p = page(); p.send(cstate());
+  csearch(p, 'ro'); p.advance(1000);
+  assert.deepStrictEqual(sent(p, 'confSearch'), []);
+  csearch(p, 'roa'); p.advance(399); csearch(p, 'road'); p.advance(399);
+  assert.deepStrictEqual(sent(p, 'confSearch'), []);
+  p.advance(1);
+  assert.deepStrictEqual(sent(p, 'confSearch').map((m) => m.query), ['road']);
+  csearch(p, 'roadm'); p.advance(400);
+  const [first, second] = sent(p, 'confSearch').map((m) => m.id);
+  assert.ok(second > first);
+  p.send({ type: 'confSearchResults', id: first, query: 'road', items: [{ id: '3001', title: 'Old', spaceKey: 'OPS' }] });
+  assert.ok(!ctree(p).textContent.includes('Confluence results'));
+  p.send({ type: 'confSearchResults', id: second, query: 'roadm', items: [{ id: '1003', title: 'Roadmap', spaceKey: 'DEMO' }, { id: '3002', title: 'Roadmap 2027', spaceKey: 'OPS' }] });
+  const kids = [...ctree(p).children], at = kids.findIndex((k) => k.textContent === 'Confluence results');
+  assert.ok(at >= 0);
+  const after = kids.slice(at + 1).filter((k) => k.dataset.id).map((k) => k.dataset.id);
+  assert.deepStrictEqual(after, ['3002'], 'pages already shown are not repeated');
+  ctree(p).querySelector('.row[data-id="3002"]').click();
+  assert.deepStrictEqual(sent(p, 'openPage'), [{ type: 'openPage', id: '3002' }]);
+  p.send({ type: 'confSearchResults', id: second, query: 'roadm', error: 'Confluence search failed' });
+  assert.ok(ctree(p).textContent.includes('Confluence search failed'));
+});
+
+test('search: a pasted page URL offers Open this page, which posts openPage { url }', () => {
+  const p = page(); p.send(cstate());
+  const url = 'https://example.atlassian.net/wiki/spaces/DEMO/pages/1009/Some+page';
+  csearch(p, url); p.advance(400);
+  const r = ctree(p).querySelector('.row.open-url');
+  assert.strictEqual(r.textContent, 'Open this page');
+  r.click();
+  assert.deepStrictEqual(sent(p, 'openPage'), [{ type: 'openPage', url }]);
+  assert.deepStrictEqual(sent(p, 'confSearch'), [], 'a URL is not searched');
+  csearch(p, 'https://example.atlassian.net/wiki/x/AbC');
+  assert.ok(ctree(p).querySelector('.row.open-url'));
+  csearch(p, 'plain words');
+  assert.strictEqual(ctree(p).querySelector('.row.open-url'), null);
+});
+
+test('Confluence text goes in as text only', () => {
+  const bad = '<img src=x onerror=alert(1)>';
+  const p = page(); p.send(cstate({
+    account: bad, note: bad, spaces: [{ key: 'DEMO', name: bad, type: 'global' }], space: { key: 'DEMO', name: bad },
+    items: { 1001: citem('1001', 'page', bad) }, roots: ['1001'],
+    mentions: [{ id: 'm1', pageId: '1001', title: bad, byName: bad, at: null, lit: true }],
+    open: { mine: true, tree: true }, mine: { items: [{ id: '2001', title: bad, spaceKey: bad }], hasMore: false },
+  }));
+  csearch(p, 'img'); p.advance(400);
+  p.send({ type: 'confSearchResults', id: sent(p, 'confSearch').pop().id, query: 'img', items: [{ id: '3001', title: bad, spaceKey: bad }] });
+  p.d.querySelector('input.space').focus();
+  assert.strictEqual(p.d.querySelector('img'), null);
+  assert.strictEqual(crow(p, '1001').querySelector('.col-title').textContent, bad);
+  assert.strictEqual(crow(p, '3001').querySelector('.col-title').textContent, bad);
+  assert.strictEqual(crow(p, '2001').querySelector('.col-space').textContent, bad);
+  assert.strictEqual(ctree(p).querySelector('.row.mention .col-by').textContent, bad);
+  assert.strictEqual(p.d.querySelector('#space-list .option').textContent, 'DEMO — ' + bad);
+  assert.strictEqual(p.d.querySelector('.note').textContent, bad);
+});
+
+test('the CSS styles the switch, the space list and the Confluence rows like the Jira ones', () => {
+  assert.ok(/\.side-switch button\[aria-pressed="true"\]/.test(CSS));
+  assert.ok(/input\.space/.test(CSS) && /\.space-list \.option\.active/.test(CSS));
+  assert.ok(/\.row \.col-title/.test(CSS) && /\.section\.toggle/.test(CSS));
+});
+
+test('signed out on the Confluence side shows Sign In and no Confluence controls', () => {
+  const p = page(); p.send(cstate({}, { signedIn: false }));
+  assert.ok(!p.d.querySelector('button.signin').hidden);
+  assert.ok(p.d.querySelector('.conf-controls').hidden);
+  assert.strictEqual(ctree(p).querySelector('.row'), null);
+});

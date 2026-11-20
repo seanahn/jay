@@ -305,3 +305,39 @@ test('pasting Google Docs\' wrapper <b style="font-weight:normal"> is not bold, 
   assert.ok(marksOf(c.paste('<p><span style="font-weight:700">x</span></p>')).includes('strong'));
   assert.ok(!marksOf(c.paste('<p><span style="font-weight:400">x</span></p>')).includes('strong'));
 });
+
+test('a Confluence page with macros, layouts, panels, expands, tables, cards and media survives a one-word edit', () => {
+  const cell = (k, s) => ({ type: k, attrs: { colspan: 1, rowspan: 1 }, content: [para(text(s))] });
+  const page = {
+    type: 'doc', version: 1, content: [
+      { type: 'paragraph', attrs: { localId: 'p-first' }, content: [text('The quick plan for DEMO.'), text(' Read '), { type: 'inlineCard', attrs: { url: 'https://example.atlassian.net/wiki/spaces/DEMO/pages/1002' } }] },
+      { type: 'extension', attrs: { extensionType: 'com.atlassian.confluence.macro.core', extensionKey: 'toc', parameters: { macroParams: { maxLevel: { value: '2' } }, macroMetadata: { macroId: { value: 'm-1' } } }, layout: 'default', localId: 'ext-1' } },
+      { type: 'bodiedExtension', attrs: { extensionType: 'com.atlassian.confluence.macro.core', extensionKey: 'details', parameters: {}, layout: 'default' }, content: [para(text('Owner: Ann Example'))] },
+      { type: 'layoutSection', content: [
+        { type: 'layoutColumn', attrs: { width: 50 }, content: [para(text('Left'))] },
+        { type: 'layoutColumn', attrs: { width: 50 }, content: [para(text('Right'))] },
+      ] },
+      { type: 'panel', attrs: { panelType: 'note', panelColor: '#eae6ff' }, content: [para(text('Ask Bo Sample first'))] },
+      { type: 'expand', attrs: { title: 'Details' }, content: [para(text('Hidden'))] },
+      { type: 'table', attrs: { isNumberColumnEnabled: false, layout: 'default', localId: 'tb-1' }, content: [
+        { type: 'tableRow', content: [cell('tableHeader', 'Name'), cell('tableHeader', 'Role')] },
+        { type: 'tableRow', content: [cell('tableCell', 'Ann Example'), cell('tableCell', 'Owner')] },
+      ] },
+      { type: 'mediaSingle', attrs: { layout: 'center', width: 640 }, content: [{ type: 'media', attrs: { id: 'med-1', type: 'file', collection: 'contentId-1001', width: 800, height: 600 } }] },
+    ],
+  };
+  const input = clone(page);
+  const pmDoc = fromAdf(input);
+  for (let i = 1; i < page.content.length; i++) assert.strictEqual(pmDoc.child(i).type.name, 'atomBlock', page.content[i].type);
+  // "quick" -> "rapid" in the first paragraph
+  const from = 1 + 'The '.length;
+  const state = EditorState.create({ schema, doc: pmDoc });
+  const out = toAdf(state.apply(state.tr.insertText('rapid', from, from + 'quick'.length)).doc);
+  const want = clone(page);
+  want.content[0].content[0].text = 'The rapid plan for DEMO.';
+  assert.ok(sameAdf(out, want), JSON.stringify(out));
+  assert.deepStrictEqual(out.content.slice(1), page.content.slice(1), 'every node but the edited paragraph is the original JSON');
+  assert.deepStrictEqual(out.content[0].attrs, { localId: 'p-first' });
+  assert.ok(!sameAdf(out, page), 'the word did change');
+  assert.deepStrictEqual(input, page, 'input is not mutated');
+});

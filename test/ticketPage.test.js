@@ -442,3 +442,21 @@ test('waiting for sign-in shows a note with no Reload; the render hides it', () 
   x.send(render());
   assert.strictEqual(banner.hidden, true);
 });
+
+test('Confluence pages: listed under their heading with textContent; a click posts openPage with the url; none, no heading', () => {
+  const x = page();
+  x.send(render());
+  assert.strictEqual(x.d.querySelector('.pages-section').hidden, true);
+  const url = 'https://example.atlassian.net/wiki/spaces/DEMO/pages/1001/T';
+  x.send({ ...render(), pages: [{ url, title: '<img src=x onerror="window.pwned=1">Plan' }, { url: url.replace('1001', '1002'), title: 'Two' }] });
+  const sec = x.d.querySelector('.pages-section');
+  assert.strictEqual(sec.querySelector('h2').textContent, 'Confluence pages');
+  const items = [...sec.querySelectorAll('button.page-link')];
+  assert.deepStrictEqual(items.map((b) => b.textContent), ['<img src=x onerror="window.pwned=1">Plan', 'Two']);
+  assert.strictEqual(sec.querySelector('img'), null);
+  x.click(items[1]);
+  assert.deepStrictEqual(x.of('openPage'), [{ type: 'openPage', url: url.replace('1001', '1002') }]);
+  assert.strictEqual(x.of('openExternal').length, 0);
+  x.send(render());
+  assert.strictEqual(x.d.querySelector('.pages-section').hidden, true, 'a render without pages removes the list');
+});

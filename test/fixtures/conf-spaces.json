@@ -1,0 +1,4 @@
+{"results":[
+{"id":"2001","key":"DEMO","name":"Demo Space","type":"global","status":"current","homepageId":"1001","authorId":"acc-me","createdAt":"2025-01-02T03:04:05.000Z","description":null,"icon":null,"spaceOwnerId":"acc-me","currentActiveAlias":"DEMO","_links":{"webui":"/spaces/DEMO"}},
+{"id":"2002","key":"~acc-bo","name":"Bo Sample","type":"personal","status":"current","homepageId":"1500","authorId":"acc-bo","createdAt":"2025-02-02T03:04:05.000Z","description":null,"icon":null,"spaceOwnerId":"acc-bo","currentActiveAlias":"~acc-bo","_links":{"webui":"/spaces/~acc-bo"}}
+],"_links":{"next":"/wiki/api/v2/spaces?cursor=CUR2&limit=250&sort=name","base":"https://example.atlassian.net/wiki"}}

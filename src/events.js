@@ -3,6 +3,11 @@
 const fs = require('fs'); const path = require('path');
 const { mentionsOf } = require('./adf');
 
+// Confluence mentions (mentions.js): { baseline, known: { [id]: firstSeenAt }, lit: { [id]: at }, seen: { [id]: at } }
+const isMap = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
+const confOf = (c) => ({ baseline: c && Number.isFinite(c.baseline) ? c.baseline : null, known: isMap(c && c.known) ? c.known : {},
+  lit: isMap(c && c.lit) ? c.lit : {}, seen: isMap(c && c.seen) ? c.seen : {} });
+
 function createEvents({ file, now = Date.now }) {
   // Events are timestamps (mentionAt, commentAt, newEpics[key]); one shows while it is later than the ticket's seen time. That is
   // what lets several windows merge their states in save() without a cleared event coming back.
@@ -10,10 +15,10 @@ function createEvents({ file, now = Date.now }) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (raw && typeof raw === 'object') {
-        return { tickets: raw.tickets || {}, views: raw.views || {}, newEpics: raw.newEpics && !Array.isArray(raw.newEpics) ? raw.newEpics : {} };
+        return { tickets: raw.tickets || {}, views: raw.views || {}, newEpics: raw.newEpics && !Array.isArray(raw.newEpics) ? raw.newEpics : {}, confluence: confOf(raw.confluence) };
       }
     } catch (_) { /* no file yet, or unreadable: start fresh */ }
-    return { tickets: {}, views: {}, newEpics: {} };
+    return { tickets: {}, views: {}, newEpics: {}, confluence: confOf(null) };
   };
   let data = load();
   const seenAt = (key) => { const t = data.tickets[key]; return t && t.seen != null ? t.seen : -Infinity; };
@@ -86,6 +91,11 @@ function createEvents({ file, now = Date.now }) {
     }
     for (const [view, keys] of Object.entries(disk.views)) data.views[view] = [...new Set([...(data.views[view] || []), ...keys])];
     for (const [k, at] of Object.entries(disk.newEpics)) data.newEpics[k] = maxOf(data.newEpics[k], at);
+    // Confluence: known is a union (first sighting kept), lit and seen the latest; a mention shows while lit > seen
+    const c = data.confluence; const d = disk.confluence;
+    c.baseline = c.baseline == null ? d.baseline : d.baseline == null ? c.baseline : Math.min(c.baseline, d.baseline);
+    for (const [id, at] of Object.entries(d.known)) c.known[id] = c.known[id] == null ? at : Math.min(c.known[id], at);
+    for (const k of ['lit', 'seen']) for (const [id, at] of Object.entries(d[k])) c[k][id] = maxOf(c[k][id], at);
   }
 
   function save() {
@@ -97,7 +107,10 @@ function createEvents({ file, now = Date.now }) {
     fs.renameSync(tmp, file);
   }
 
-  return { observe, observeEpics, seen, state, rollup, badge, save };
+  /** The Confluence mentions state, merged with what other windows saved; change it in place, then save(). */
+  function conf() { merge(); return data.confluence; }
+
+  return { observe, observeEpics, seen, state, rollup, badge, save, conf, now };
 }
 
 module.exports = { createEvents };
