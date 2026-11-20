@@ -818,3 +818,17 @@ test('the CSS hides [hidden] over any display rule, so the Confluence side shows
   assert.strictEqual(p.d.querySelector('.controls:not(.conf-controls)').hidden, true, 'the Jira search, project and period are hidden on the Confluence side');
   assert.strictEqual(p.d.querySelector('.conf-controls').hidden, false);
 });
+
+test('while the space tree or My pages loads, its section header says so, even with rows already shown', () => {
+  const p = page();
+  const head = (name) => p.d.querySelector(`.section.toggle[data-section="${name}"]`);
+  p.send(cstate({ loading: { spaces: false, tree: true, mine: false } }));
+  assert.ok(head('tree').querySelector('.loading'), 'the tree header shows it is loading');
+  assert.strictEqual(head('tree').querySelector('.loading').textContent, 'Loading…');
+  p.send(cstate({ loading: { spaces: false, tree: false, mine: false } }));
+  assert.strictEqual(head('tree').querySelector('.loading'), null, 'and stops once it has loaded');
+  p.send(cstate({ open: { mine: true, tree: true }, loading: { spaces: false, tree: false, mine: true } }));
+  assert.ok(head('mine').querySelector('.loading'), 'My pages too');
+  p.send(cstate({ loading: { spaces: false, tree: true, mine: false }, open: { mine: false, tree: false } }));
+  assert.ok(head('tree').querySelector('.loading'), 'a collapsed section shows it too');
+});

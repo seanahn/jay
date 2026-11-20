@@ -335,9 +335,10 @@
   }
   const moreRow = (key, depth) => { const r = el('div', 'row more depth' + Math.min(depth, 2), 'More'); r.dataset.more = key; return r; };
   const quiet = (t) => el('div', 'empty', t);
-  function sectionHead(name, label, open) {
+  function sectionHead(name, label, open, loading) {
     const h = el('div', 'section toggle'); h.dataset.section = name; h.setAttribute('role', 'button'); h.tabIndex = 0; h.setAttribute('aria-expanded', String(open));
     h.append(el('span', 'twisty', open ? '⌄' : '›'), d.createTextNode(label));
+    if (loading) { h.append(el('span', 'loading', 'Loading…')); h.setAttribute('aria-busy', 'true'); }
     return h;
   }
   function confWalk(ids, depth, q, out) {
@@ -381,7 +382,7 @@
       }
     }
     const open = c.open || { mine: false, tree: true }, mine = c.mine || { items: [] }, loading = c.loading || {};
-    rows.push(sectionHead('mine', 'My pages', !!open.mine));
+    rows.push(sectionHead('mine', 'My pages', !!open.mine, !!loading.mine));
     if (open.mine) {
       for (const x of mine.items || []) rows.push(pageRow('my-page', x.id, x.title, x.spaceKey, String(x.title) + '\nSpace: ' + String(x.spaceKey)));
       if (!(mine.items || []).length) rows.push(quiet(loading.mine ? 'Loading…' : 'Nothing here'));
@@ -389,7 +390,7 @@
     }
     if (!c.space) rows.push(quiet('Pick a space'));
     else {
-      rows.push(sectionHead('tree', String(c.space.name || c.space.key), open.tree !== false));
+      rows.push(sectionHead('tree', String(c.space.name || c.space.key), open.tree !== false, !!loading.tree));
       if (open.tree !== false) {
         const sub = [];
         confWalk(c.roots, 0, q, sub);

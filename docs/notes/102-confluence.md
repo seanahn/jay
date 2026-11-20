@@ -447,6 +447,10 @@ Questions that came up while building, and how they were settled:
   on the tree's top level, it shows first as "Overview" and its children
   are the top level, as in Confluence's own sidebar; other top-level pages
   follow them. The tree no longer shows the space name twice.
+- **Loading shows on the section header** (0.2.2): while the space's tree
+  or My pages loads, its header shows "Loading…", even when cached rows
+  are already on screen or the section is collapsed. A page's own branch
+  already showed "Loading…" under it.
 - **The Confluence side hid Jira's controls only in tests** (fixed in
   0.2.1): `.controls { display: flex }` overrode the browser's `[hidden]`
   rule, so the key search, project and period boxes showed on the
