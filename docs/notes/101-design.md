@@ -581,6 +581,15 @@ files (Sean).
 - **perch calls that command** from `ideContext()`, as it does for
   chirp. That change was made in perch as part of this build
   *(builder's call; chirp did the same)*.
+- Two more commands, also hidden from the palette, are for other
+  extensions. `jay.openTicket(key)` uppercases and trims the key,
+  checks it against the ticket-key pattern and opens it exactly as a
+  sidebar click does (so `jay.ticketView` and the Atlassian/jay-tab
+  fallback apply); it returns `true`, or `false` for a bad key or when
+  signed out. `jay.projectKeys()` returns the project keys jay has
+  loaded for this sign-in (the remembered list while it matches), or
+  `[]` when signed out. perch uses them to link ticket keys in Claude's
+  replies.
 - **Sean adds one line to `~/.claude/CLAUDE.md` himself.** jay never
   writes it. The README gives the line:
 

@@ -25,6 +25,10 @@ test('manifest', () => {
   assert.strictEqual(p.extensionDependencies, undefined, 'the Atlassian extension is a soft dependency');
   const hidden = p.contributes.menus.commandPalette.find((m) => m.command === 'jay.activeIssueFile');
   assert.strictEqual(hidden.when, 'false');
+  for (const c of ['jay.openTicket', 'jay.projectKeys']) {
+    assert.ok(p.contributes.commands.some((x) => x.command === c), c + ' is contributed');
+    assert.strictEqual(p.contributes.menus.commandPalette.find((m) => m.command === c).when, 'false', c + ' is hidden');
+  }
 });
 
 test('prosemirror bundle', () => {

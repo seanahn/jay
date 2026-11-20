@@ -165,6 +165,9 @@ writes it):
   → User Rules.
 - **perch** picks up the ticket in front automatically, through the
   `jay.activeIssueFile` command.
+- Other extensions can call the hidden `jay.openTicket` (key) and
+  `jay.projectKeys` commands; perch uses them to link ticket keys in
+  Claude's replies.
 
 ## What jay writes to disk
 

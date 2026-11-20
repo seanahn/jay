@@ -63,12 +63,28 @@
       {
         "command": "jay.activeIssueFile",
         "title": "jay: Active Issue File"
+      },
+      {
+        "command": "jay.openTicket",
+        "title": "jay: Open Ticket"
+      },
+      {
+        "command": "jay.projectKeys",
+        "title": "jay: Project Keys"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "jay.activeIssueFile",
+          "when": "false"
+        },
+        {
+          "command": "jay.openTicket",
+          "when": "false"
+        },
+        {
+          "command": "jay.projectKeys",
           "when": "false"
         }
       ],

@@ -1318,3 +1318,48 @@ test('ticketView: closing the tracked Atlassian tab removes its file', async () 
   ui.openTab({ label: 'DEMO-1', viewType: ATL_TYPE }); await settle();
   assert.strictEqual(await ui.commands['jay.activeIssueFile'](), null);
 });
+
+// ---- commands for other extensions (perch): jay.openTicket, jay.projectKeys
+test('jay.openTicket routes like a click: Atlassian by default, jay tab with ticketView "jay"', async () => {
+  const h = start();
+  atlassian();
+  await settle();
+  assert.strictEqual(await ui.commands['jay.openTicket'](' demo-1 '), true);
+  await settle();
+  assert.deepStrictEqual(atlCalls(), [[ATL_COMMAND, 'DEMO-1']]);
+  assert.strictEqual(ui.panels.length, 0);
+  ext.deactivate(); running.length = 0;
+  start({ config: { 'jay.ticketView': 'jay' } });
+  await settle();
+  assert.strictEqual(await ui.commands['jay.openTicket']('DEMO-2'), true);
+  await settle();
+  assert.strictEqual(ui.panels.at(-1).title, 'DEMO-2');
+});
+
+test('jay.openTicket: invalid or missing key, or signed out, returns false and opens nothing', async () => {
+  start();
+  atlassian();
+  await settle();
+  for (const bad of ['nope', '', undefined, null, 42, 'DEMO-1; rm']) assert.strictEqual(await ui.commands['jay.openTicket'](bad), false);
+  await settle();
+  assert.strictEqual(atlCalls().length, 0);
+  assert.strictEqual(ui.panels.length, 0);
+  ext.deactivate(); running.length = 0;
+  start({ signedOut: true, config: { 'jay.site': SITE } });
+  atlassian();
+  await settle();
+  assert.strictEqual(await ui.commands['jay.openTicket']('DEMO-1'), false);
+  await settle();
+  assert.strictEqual(atlCalls().length, 0);
+  assert.strictEqual(ui.panels.length, 0);
+});
+
+test('jay.projectKeys returns the loaded project keys; [] when signed out', async () => {
+  start();
+  await settle();
+  assert.deepStrictEqual(await ui.commands['jay.projectKeys'](), ['DEMO', 'OTH']);
+  ext.deactivate(); running.length = 0;
+  start({ signedOut: true, config: { 'jay.site': SITE } });
+  await settle();
+  assert.deepStrictEqual(await ui.commands['jay.projectKeys'](), []);
+});

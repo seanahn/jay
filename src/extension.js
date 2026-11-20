@@ -550,6 +550,14 @@ function activate(context, deps = {}) {
     vscode.commands.registerCommand('jay.signOut', () => signOut()),
     vscode.commands.registerCommand('jay.focusSearch', () => sidebar.focusSearch()),
     vscode.commands.registerCommand('jay.activeIssueFile', () => (cfg('agentFiles', true) === false ? null : atlassian.frontFile() || tickets.frontFile())),
+    // for other extensions (perch): open a ticket as a sidebar click does; the project keys loaded for this sign-in
+    vscode.commands.registerCommand('jay.openTicket', async (key) => {
+      const k = typeof key === 'string' ? key.trim().toUpperCase() : '';
+      if (!KEY_RE.test(k) || !s.running) return false;
+      try { await atlassian.open(k); } catch (e) { log(e); }
+      return true;
+    }),
+    vscode.commands.registerCommand('jay.projectKeys', () => (s.running ? (s.projectsLoaded ? s.projects : s.remembered ? lastProjects() : []).map((p) => p.key) : [])),
     out,
   );
 
