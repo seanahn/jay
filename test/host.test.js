@@ -1676,3 +1676,19 @@ test('a ticket tab lists the Confluence pages its remote links point to; clickin
   tab.webview._receive({ type: 'openPage', url: PAGE_URL }); await settle(80);
   assert.strictEqual(ui.panels.at(-1).viewType, 'jay.page');
 });
+
+test('the tree: pages with no children show as leaves once the tree has loaded, and after a branch expands', async () => {
+  const h = start({ confluence: true, world: { childPages: {
+    1001: [{ id: '1101', type: 'page', title: 'Has kids' }, { id: '1102', type: 'page', title: 'Leaf' }],
+    1101: [{ id: '1201', type: 'page', title: 'Grandchild leaf' }, { id: '1202', type: 'folder', title: 'Folder with kids' }],
+    1202: [{ id: '1301', type: 'page', title: 'Deep' }],
+  } } });
+  await settle();
+  const r = (m) => h.view.webview._receive(m);
+  r({ type: 'setSpace', key: 'DEMO' }); await settle(80);
+  let conf = lastState(h.view).conf;
+  assert.deepStrictEqual([conf.items['1101'].childrenLoaded, conf.items['1102'].childrenLoaded, conf.items['1102'].children], [false, true, []], 'the leaf has no twisty; the page with children keeps one');
+  r({ type: 'expandPage', id: '1101' }); await settle(80);
+  conf = lastState(h.view).conf;
+  assert.deepStrictEqual([conf.items['1201'].childrenLoaded, conf.items['1202'].childrenLoaded], [true, false], 'the same after expanding a branch');
+});

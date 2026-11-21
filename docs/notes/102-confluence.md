@@ -447,6 +447,11 @@ Questions that came up while building, and how they were settled:
   on the tree's top level, it shows first as "Overview" and its children
   are the top level, as in Confluence's own sidebar; other top-level pages
   follow them. The tree no longer shows the space name twice.
+- **Leaves show no twisty** (0.2.4). Confluence's children listing
+  doesn't say whether each child has children, so after the tree or a
+  branch loads, jay asks for one child of each unloaded page or folder
+  (five at a time); one with none becomes a leaf. A failed check leaves
+  the twisty.
 - **A page tab says "Loading…" until its content arrives** (0.2.3), in the
   banner that the waiting and load-error messages also use.
 - **Loading shows on the section header** (0.2.2): while the space's tree

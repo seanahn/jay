@@ -203,7 +203,11 @@ function createConfluenceSide(o) {
       // the home page's children are the top level, as in Confluence's own sidebar (see homeOf)
       const home = homeOf(sp, tree);
       if (home && !home.childrenLoaded) { await pageTree.expand(tree, home.id); if (!current()) return; }
-      c.tree = tree; pageTree.save(tree, owner);
+      c.tree = tree; pageTree.save(tree, owner); o.render();
+      // then which of the shown pages are leaves (no twisty); the rows are already on screen meanwhile
+      await pageTree.probe(tree, [...tree.roots, ...(home ? home.children : [])]);
+      if (!current() || c.tree !== tree) return;
+      pageTree.save(tree, owner);
     } catch (e) { if (live(c, g)) handle(c, e); } finally { if (current()) { c.loading.tree = false; o.render(); } }
   }
 
@@ -223,6 +227,11 @@ function createConfluenceSide(o) {
     c.busy.add(k);
     try {
       await pageTree[op](tree, id);
+      if (!(live(c, g) && c.tree === tree)) return;
+      pageTree.save(tree, s.trusted); o.render();
+      // then which of the new rows are leaves
+      const parent = id === null || id === undefined ? null : tree.items.get(String(id));
+      await pageTree.probe(tree, parent ? parent.children : tree.roots);
       if (live(c, g) && c.tree === tree) { pageTree.save(tree, s.trusted); o.render(); }
     } catch (e) { if (live(c, g)) handle(c, e); } finally { c.busy.delete(k); }
   }

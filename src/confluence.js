@@ -76,7 +76,7 @@ function createConfluence(http, auth) {
     },
 
     rootItems: (spaceId, { cursor } = {}) => list(`/api/v2/spaces/${encodeURIComponent(spaceId)}/pages`, { depth: 'root', status: 'current', limit: 250, cursor }, 'page'),
-    children: (id, kind, { cursor } = {}) => list(`/api/v2/${kind}s/${encodeURIComponent(id)}/direct-children`, { limit: 250, cursor }),
+    children: (id, kind, { cursor, limit = 250 } = {}) => list(`/api/v2/${kind}s/${encodeURIComponent(id)}/direct-children`, { limit, cursor }),
 
     async page(id) {
       const p = `/api/v2/pages/${encodeURIComponent(id)}`;

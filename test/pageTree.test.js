@@ -104,3 +104,24 @@ test('clearAll removes every cached tree and leftover temp file, and nothing els
   fs.rmSync(cacheDir, { recursive: true });
   tree.clearAll();
 });
+
+test('probe: an expandable item with no children becomes a loaded leaf; one with children, an error, or a non-expandable kind is left as it was', async () => {
+  const { tree, confluence } = make();
+  const t = await tree.load('2001', 'acc-ann');
+  await tree.expand(t, '1001'); await tree.more(t, '1001');
+  confluence.calls.length = 0;
+  const orig = confluence.children;
+  confluence.children = async (id, kind, o = {}) => { if (id === '1103') throw new Error('boom'); return orig(id, kind, o); };
+  t.items.set('1104', { id: '1104', kind: 'whiteboard', title: 'Board', position: 0, parentId: '1001', childrenLoaded: true, children: [], next: null });
+  await tree.probe(t, ['1101', '1102', '1103', '1104', 'nope']);
+  assert.deepStrictEqual(confluence.calls.map((c) => c[1]).sort(), ['1101', '1102'], 'one probe per unloaded page or folder (1103 threw before recording)');
+  assert.deepStrictEqual([t.items.get('1101').childrenLoaded, t.items.get('1101').children], [true, []], 'no children: a leaf');
+  assert.strictEqual(t.items.get('1102').childrenLoaded, false, 'a folder with children stays expandable');
+  assert.strictEqual(t.items.get('1103').childrenLoaded, false, 'a failed probe stays expandable');
+  // the probe asks for one child only
+  confluence.calls.length = 0; const seen = [];
+  confluence.children = async (id, kind, o = {}) => { seen.push(o.limit); return { items: [], next: null }; };
+  t.items.get('1102').childrenLoaded = false;
+  await tree.probe(t, ['1102']);
+  assert.deepStrictEqual(seen, [1]);
+});

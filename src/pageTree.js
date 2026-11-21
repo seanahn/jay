@@ -6,6 +6,7 @@
 const fs = require('fs'); const path = require('path');
 
 const EXPANDABLE = new Set(['page', 'folder']);
+const PROBE_AT_ONCE = 5;
 
 function atomic(file, text) {
   const dir = path.dirname(file);
@@ -50,6 +51,23 @@ function createPageTree({ confluence, cacheDir, now = Date.now }) {
     return tree;
   }
 
+  /**
+   * Which of ids are leaves: Confluence's children listing doesn't say whether each child has children of its own, so each
+   * unloaded page or folder is asked for one child (five at a time). One with none becomes a loaded leaf (no twisty); one with
+   * children, or whose probe failed, stays expandable.
+   */
+  async function probe(tree, ids) {
+    const todo = (ids || []).map((id) => tree.items.get(String(id))).filter((it) => it && !it.childrenLoaded && EXPANDABLE.has(it.kind));
+    const one = async (it) => {
+      try {
+        const r = await confluence.children(it.id, it.kind, { limit: 1 });
+        if (r && !(r.items || []).length && !r.next && !it.childrenLoaded) Object.assign(it, { childrenLoaded: true, children: [], next: null });
+      } catch (_) { /* unknown: stays expandable */ }
+    };
+    for (let i = 0; i < todo.length; i += PROBE_AT_ONCE) await Promise.all(todo.slice(i, i + PROBE_AT_ONCE).map(one));
+    return tree;
+  }
+
   /** The next page of an item's children (id), or of the roots (null). */
   async function more(tree, id) {
     if (id === null || id === undefined) {
@@ -84,7 +102,7 @@ function createPageTree({ confluence, cacheDir, now = Date.now }) {
     for (const n of names) if (/^\.?confluence-.*\.(json|tmp)$/.test(n)) { try { fs.unlinkSync(path.join(cacheDir, n)); } catch (_) { /* gone */ } }
   }
 
-  return { load, expand, more, save, cached, clearAll };
+  return { load, expand, more, probe, save, cached, clearAll };
 }
 
 module.exports = { createPageTree };
