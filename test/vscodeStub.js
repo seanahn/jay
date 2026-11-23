@@ -125,7 +125,8 @@ function install() {
   ui.setConfig = (key, value) => { ui.config[key] = value; configChange.fire({ affectsConfiguration: (sec) => key === sec || key.startsWith(sec + '.') }); };
   /** Shows the sidebar: resolves the registered view provider with a fake view. */
   ui.resolveSidebar = () => {
-    const view = { webview: fakeWebview(), badge: undefined, visible: true, show() {}, onDidChangeVisibility: () => ({ dispose() {} }), onDidDispose: () => ({ dispose() {} }) };
+    let badge;  // as VS Code: assigning undefined leaves the previous badge; { value: 0 } draws nothing
+    const view = { webview: fakeWebview(), get badge() { return badge; }, set badge(b) { if (b) badge = b; }, get shownBadge() { return badge && badge.value ? badge.value : 0; }, visible: true, show() {}, onDidChangeVisibility: () => ({ dispose() {} }), onDidDispose: () => ({ dispose() {} }) };
     ui.providers['jay.sidebar'].resolveWebviewView(view, {}, {});
     ui.view = view;
     return view;

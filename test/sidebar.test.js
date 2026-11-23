@@ -45,7 +45,15 @@ test('setBadge sets and clears the view badge', () => {
   s.setBadge(3);
   assert.deepStrictEqual(view.badge, { value: 3, tooltip: '3 new' });
   s.setBadge(0);
-  assert.strictEqual(view.badge, undefined);
+  assert.strictEqual(view.shownBadge, 0);
+});
+
+test('the mentions badge clears when the count drops to 0', () => {
+  const { s, view } = boot();
+  s.setBadge(2);
+  assert.strictEqual(view.shownBadge, 2);
+  s.setBadge(0);
+  assert.strictEqual(view.shownBadge, 0, 'VS Code ignores an undefined badge, so 0 must be set explicitly');
 });
 
 test('setBadge before the view exists is applied when it resolves', () => {

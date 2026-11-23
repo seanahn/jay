@@ -55,8 +55,8 @@ class Sidebar {
   }
 
   applyBadge() {
-    // 0 clears the badge: a { value: 0 } badge may linger on some builds
-    if (this.view) this.view.badge = this.badge ? { value: this.badge, tooltip: `${this.badge} new` } : undefined;
+    // 0 clears the badge as { value: 0 }: VS Code ignores an undefined badge on webview views
+    if (this.view) this.view.badge = { value: this.badge || 0, tooltip: this.badge ? `${this.badge} new` : '' };
   }
 
   /** The view's title (the header above the page): Jira or Confluence, after the side shown. Kept until the view resolves. */

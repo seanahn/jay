@@ -449,7 +449,9 @@ Questions that came up while building, and how they were settled:
   follow them. The tree no longer shows the space name twice.
 - **Twisties line up** (0.2.5). The twisty is a fixed 12px box holding one
   `›`, rotated 90 degrees by a class when open; a leaf gets the same empty
-  box, so chevrons form one column per depth.
+  box, so chevrons form one column per depth. The mentions badge clears at
+  0 by setting `{ value: 0, tooltip: '' }`: VS Code ignores an undefined
+  badge on webview views, so the last count used to stay on the icon.
 - **Leaves show no twisty** (0.2.4). Confluence's children listing
   doesn't say whether each child has children, so after the tree or a
   branch loads, jay asks for one child of each unloaded page or folder

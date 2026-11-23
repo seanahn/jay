@@ -495,7 +495,7 @@ test('a mention lights the epic and the badge; seen clears it', async () => {
   const doc = (content) => ({ type: 'doc', version: 1, content: [{ type: 'paragraph', content }] });
   const h = start();
   await settle();
-  assert.strictEqual(h.view.badge, undefined);
+  assert.strictEqual(h.view.shownBadge, 0);
   h.clock.t += 120000;
   const at = new Date(h.clock.t - 30000).toISOString();
   h.world.updated = [raw('DEMO-2', { parent: 'DEMO-1', assignee: OTHER, updated: at })];
@@ -512,7 +512,7 @@ test('a mention lights the epic and the badge; seen clears it', async () => {
   ui.panels.at(-1).webview._receive({ type: 'ready' });
   await settle();
   assert.strictEqual(lastState(h.view).events['DEMO-1'], undefined);
-  assert.strictEqual(h.view.badge, undefined);
+  assert.strictEqual(h.view.shownBadge, 0);
 });
 
 const docOf = (content) => ({ type: 'doc', version: 1, content: [{ type: 'paragraph', content }] });
@@ -554,7 +554,7 @@ test('restart shows nothing of the last sign-in until it knows who this is', asy
   const st = lastState(h.view);
   assert.deepStrictEqual(st.groups, []);
   assert.strictEqual(st.account, 'Signing in…');
-  assert.strictEqual(h.view.badge, undefined);
+  assert.strictEqual(h.view.shownBadge, 0);
   await settle();
   assert.deepStrictEqual(keysOf(lastState(h.view)), ['DEMO-1']);
   assert.strictEqual(lastState(h.view).account, 'Signed in as ann@example.com (API token)');
@@ -877,7 +877,7 @@ test('sprint mode: a ticket new to the period is bold and marked new, without th
   assert.ok(jqls(h).includes('key in (DEMO-7) AND sprint = 42'));
   assert.deepStrictEqual(st.events['DEMO-7'], { mention: false, bold: true, newEpic: true });
   assert.deepStrictEqual(st.events['DEMO-1'], { mention: false, bold: true, newEpic: false }, 'a parent epic is not a member');
-  assert.strictEqual(h.view.badge, undefined);
+  assert.strictEqual(h.view.shownBadge, 0);
   h.view.webview._receive({ type: 'open', key: 'DEMO-7' });
   ui.panels.at(-1).webview._receive({ type: 'ready' });
   await settle();
@@ -1502,7 +1502,7 @@ test('mentions: the first poll is the baseline; a new mention by someone else ad
   const q = wikiCalls(h).find((c) => c.url.includes('/rest/api/search'));
   assert.strictEqual(cqlOf(q), 'mention = currentUser() order by lastmodified desc');
   assert.strictEqual(new URL(q.url).searchParams.get('limit'), '50');
-  assert.strictEqual(h.view.badge, undefined);
+  assert.strictEqual(h.view.shownBadge, 0);
   assert.deepStrictEqual(lastState(h.view).conf.mentions, []);
   h.world.mentionHits = [chit('5001', { type: 'comment', title: 'Re: Demo Home', container: '1001' }), chit('1001'), chit('1002', { by: ME })];
   h.timers.fire(); await settle();
@@ -1511,7 +1511,7 @@ test('mentions: the first poll is the baseline; a new mention by someone else ad
   h.view.webview._receive({ type: 'openMention', id: '5001' }); await settle();
   const panel = ui.panels.at(-1);
   assert.strictEqual(panel.viewType, 'jay.page');
-  assert.strictEqual(h.view.badge, undefined);
+  assert.strictEqual(h.view.shownBadge, 0);
   assert.deepStrictEqual(lastState(h.view).conf.mentions, []);
   const saved = JSON.parse(fs.readFileSync(path.join(h.jayDir, 'seen.json'), 'utf8')).confluence;
   assert.ok(saved.seen['5001'] >= saved.lit['5001']);
