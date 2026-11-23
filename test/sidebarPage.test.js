@@ -661,12 +661,12 @@ test('My pages: collapsed by default; the header toggles; open lists pages with 
   const p = page(); p.send(cstate({ mine: { items: [{ id: '2001', title: 'My notes', spaceKey: 'OPS' }], hasMore: true } }));
   const head = () => ctree(p).querySelector('.section[data-section="mine"]');
   assert.strictEqual(head().getAttribute('aria-expanded'), 'false');
-  assert.strictEqual(head().querySelector('.twisty').textContent, '›');
+  assert.ok(!head().querySelector('.twisty').classList.contains('open'));
   assert.strictEqual(crow(p, '2001'), null);
   head().click();
   assert.deepStrictEqual(sent(p, 'toggleSection'), [{ type: 'toggleSection', name: 'mine' }]);
   p.send(cstate({ open: { mine: true, tree: true }, mine: { items: [{ id: '2001', title: 'My notes', spaceKey: 'OPS' }], hasMore: true } }));
-  assert.strictEqual(head().getAttribute('aria-expanded'), 'true'); assert.strictEqual(head().querySelector('.twisty').textContent, '⌄');
+  assert.strictEqual(head().getAttribute('aria-expanded'), 'true'); assert.ok(head().querySelector('.twisty').classList.contains('open'));
   const r = crow(p, '2001');
   assert.strictEqual(r.querySelector('.col-title').textContent, 'My notes'); assert.strictEqual(r.querySelector('.col-space').textContent, 'OPS');
   r.click();
@@ -831,4 +831,16 @@ test('while the space tree or My pages loads, its section header says so, even w
   assert.ok(head('mine').querySelector('.loading'), 'My pages too');
   p.send(cstate({ loading: { spaces: false, tree: true, mine: false }, open: { mine: false, tree: false } }));
   assert.ok(head('tree').querySelector('.loading'), 'a collapsed section shows it too');
+});
+
+test('twisties share one fixed-width box: open is a class, the glyph is the same, a leaf is an empty box', () => {
+  const p = page(); p.send(state({ columns: ['key', 'summary'] }));
+  const tw = (k) => p.d.querySelector(`.row[data-key="${k}"] .twisty`);
+  const open = tw('DEMO-1'), shut = tw('DEMO-5'), leaf = tw('DEMO-4');
+  assert.ok(open.classList.contains('open')); assert.ok(!shut.classList.contains('open')); assert.ok(!leaf.classList.contains('open'));
+  assert.strictEqual(open.textContent, shut.textContent); assert.strictEqual(leaf.textContent, '');
+  for (const t of [open, shut, leaf]) assert.strictEqual(t.className.split(' ')[0], 'twisty');
+  assert.match(CSS, /^\.twisty \{[^}]*width: 12px;[^}]*flex: none;/m);
+  assert.match(CSS, /^\.twisty\.open \{ transform: rotate\(90deg\); \}/m);
+  assert.doesNotMatch(CSS, /\.twisty[^{]*\{[^}]*\bwidth: (?!12px)/);
 });

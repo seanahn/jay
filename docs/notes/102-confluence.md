@@ -447,6 +447,9 @@ Questions that came up while building, and how they were settled:
   on the tree's top level, it shows first as "Overview" and its children
   are the top level, as in Confluence's own sidebar; other top-level pages
   follow them. The tree no longer shows the space name twice.
+- **Twisties line up** (0.2.5). The twisty is a fixed 12px box holding one
+  `›`, rotated 90 degrees by a class when open; a leaf gets the same empty
+  box, so chevrons form one column per depth.
 - **Leaves show no twisty** (0.2.4). Confluence's children listing
   doesn't say whether each child has children, so after the tree or a
   branch loads, jay asks for one child of each unloaded page or folder

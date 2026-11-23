@@ -196,6 +196,10 @@
     return row;
   }
 
+  // One glyph in a fixed-width box; open is a class (rotated in CSS), so the box never changes. A leaf is the empty box.
+  function setTwisty(tw, has, open) { tw.textContent = has ? '›' : ''; tw.classList.toggle('open', !!(has && open)); }
+  function twistyEl(has, open) { const tw = el('span', 'twisty', ''); setTwisty(tw, has, open); return tw; }
+
   function walk(nodes, depth, q, out, parentTitle) {
     for (const n of nodes) {
       if (q && !subtreeHas(n, q)) continue;
@@ -203,7 +207,7 @@
       const kids = n.children.length > 0;
       const forced = !!q && n.children.some((c) => subtreeHas(c, q));   // search opens the ancestors of matches only
       const open = kids && (forced || isOpen(n));
-      row.querySelector('.twisty').textContent = kids ? (open ? '⌄' : '›') : '';
+      setTwisty(row.querySelector('.twisty'), kids, open);
       if (!kids) row.querySelector('.twisty').dataset.toggle = '';
       out.push(row);
       if (open) walk(n.children, depth + 1, q, out, n.summary);
@@ -337,7 +341,7 @@
   const quiet = (t) => el('div', 'empty', t);
   function sectionHead(name, label, open, loading) {
     const h = el('div', 'section toggle'); h.dataset.section = name; h.setAttribute('role', 'button'); h.tabIndex = 0; h.setAttribute('aria-expanded', String(open));
-    h.append(el('span', 'twisty', open ? '⌄' : '›'), d.createTextNode(label));
+    h.append(twistyEl(true, open), d.createTextNode(label));
     if (loading) { h.append(el('span', 'loading', 'Loading…')); h.setAttribute('aria-busy', 'true'); }
     return h;
   }
@@ -348,7 +352,7 @@
       const r = pageRow('page depth' + Math.min(depth, 2), it.id, it.title, undefined, [...pathOf(it), String(it.title)].join(' › ') + (it.kind && it.kind !== 'page' ? '\n' + it.kind : ''));
       r.dataset.kind = String(it.kind || '');
       const open = expandable(it) && ((!!q && kidsOf(it).some((k) => cHas(k, q))) || confOpen(it));
-      if (expandable(it)) { const tw = r.querySelector('.twisty'); tw.textContent = open ? '⌄' : '›'; tw.dataset.toggle = it.id; }
+      if (expandable(it)) { const tw = r.querySelector('.twisty'); setTwisty(tw, true, open); tw.dataset.toggle = it.id; }
       out.push(r);
       if (!open) continue;
       if (!it.childrenLoaded) { out.push(quiet('Loading…')); continue; }

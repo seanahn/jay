@@ -20,7 +20,8 @@ button.signin { margin: 8px; }
 .row.depth0 { padding-left: 0; }
 .row.depth1 { padding-left: 8px; }
 .row.depth2 { padding-left: 16px; }
-.row .twisty { display: inline-block; width: 12px; flex: none; }
+.twisty { display: inline-block; box-sizing: border-box; width: 12px; flex: none; text-align: center; }
+.twisty.open { transform: rotate(90deg); }
 .row [class^="col-"] { flex: none; font-size: 11px; white-space: nowrap; color: var(--vscode-descriptionForeground); }
 .row .col-assignee.me { color: var(--vscode-charts-green); }
 .row .col-key { color: inherit; }
@@ -51,7 +52,6 @@ button.signin { margin: 8px; }
 .side-switch button[aria-pressed="true"] { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .section.toggle { cursor: pointer; padding-left: 0; display: flex; gap: 0; align-items: baseline; }
 .section.toggle:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
-.section.toggle .twisty { display: inline-block; width: 12px; flex: none; text-align: center; }
 .section.toggle .loading { margin-left: 6px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--vscode-descriptionForeground); animation: pulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .section.toggle .loading { animation: none; } }
 .row.more, .row.open-url { padding-left: 12px; color: var(--vscode-textLink-foreground); }
