@@ -109,10 +109,18 @@ function atlassian(o = {}) {
   const tabs = {};
   ui.commands[ATL_COMMAND] = async (key) => {
     if (o.reject) throw new Error(o.reject);
+    // o.stuck: as Atlassian's page whose Jira client failed: it opens untitled ("Jira Issue") and keeps that title
+    if (o.stuck) { tabs[key] = ui.openTab({ label: ATL_DEFAULT_TITLE, viewType: ATL_TYPE }); return; }
     tabs[key] = tabs[key] && tabs[key].group.tabs.includes(tabs[key]) ? (ui.activateTab(tabs[key]), tabs[key]) : ui.openTab({ label: key, viewType: ATL_TYPE });
   };
   return tabs;
 }
+const ATL_DEFAULT_TITLE = 'Jira Issue';
+const ATL_WATCH_MS = 15000;
+/** Fires only the Atlassian watch timers (the pollers' timers stay pending). */
+const fireWatch = (h) => { for (const [id, t] of [...h.timers.pending]) if (t.ms === ATL_WATCH_MS) { h.timers.pending.delete(id); t.fn(); } };
+const RESTART = 'workbench.action.restartExtensionHost';
+const LOST = (key) => `The Atlassian extension lost its Jira sign-in, so ${key} opened in jay's view.`;
 const atlCalls = () => ui.executed.filter((c) => c[0] === ATL_COMMAND);
 const seenAt = (h, key) => { try { const t = JSON.parse(fs.readFileSync(path.join(h.jayDir, 'seen.json'), 'utf8')).tickets[key]; return t ? t.seen : null; } catch (_) { return null; } };
 
@@ -122,7 +130,7 @@ function start(o = {}) {
   for (const k of Object.keys(ui.workspaceConfig)) delete ui.workspaceConfig[k];
   Object.assign(ui.workspaceConfig, o.workspaceConfig || {});
   ui.panels.length = 0; ui.inputs.length = 0; ui.inputOptions.length = 0; ui.out.length = 0; ui.watchers.length = 0;
-  ui.infos.length = 0; ui.executed.length = 0; ui.resetTabs();
+  ui.infos.length = 0; ui.executed.length = 0; ui.resetTabs(); ui.closedTabs.length = 0; ui.infoItems.length = 0; ui.infoAnswer = null;
   for (const k of Object.keys(ui.extensions)) delete ui.extensions[k];
   delete ui.commands[ATL_COMMAND];
   ui.focused = o.focused !== undefined ? o.focused : true;
@@ -1347,6 +1355,88 @@ test('ticketView: closing the tracked Atlassian tab removes its file', async () 
 });
 
 // ---- commands for other extensions (perch): jay.openTicket, jay.projectKeys
+test('ticketView: an Atlassian tab retitled with the key within the watch: no fallback, no notice', async () => {
+  const h = start();
+  atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle();
+  assert.strictEqual(h.timers.delays().includes(ATL_WATCH_MS), false, 'the page was titled with the key at once: no watch left');
+  fireWatch(h); await settle();
+  assert.deepStrictEqual([ui.closedTabs.length, ui.panels.length, ui.infos.length], [0, 0, 0]);
+});
+
+test('ticketView: a slow Atlassian page titled just before the watch ends: no fallback', async () => {
+  const h = start();
+  const tabs = atlassian({ stuck: true });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle();
+  assert.ok(h.timers.delays().includes(ATL_WATCH_MS), 'watching');
+  // the page finishes loading: Atlassian retitles its panel with the key
+  tabs['DEMO-1'].label = 'DEMO-1'; ui.activateTab(tabs['DEMO-1']); await settle();
+  fireWatch(h); await settle();
+  assert.deepStrictEqual([ui.closedTabs.length, ui.panels.length, ui.infos.length], [0, 0, 0]);
+});
+
+test('ticketView: Atlassian stuck on "Jira Issue" while jay loads the ticket: its tab closes, jay\'s view opens, one notice; Restart extensions runs the restart', async () => {
+  const h = start();
+  const tabs = atlassian({ stuck: true });
+  ui.infoAnswer = (m, items) => items[0];   // the user presses "Restart extensions"
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle();
+  assert.strictEqual(ui.panels.length, 0, 'nothing decided before the watch ends');
+  fireWatch(h); await settle();
+  assert.deepStrictEqual(ui.closedTabs, [tabs['DEMO-1']], 'the broken Atlassian tab is closed');
+  assert.strictEqual(ui.panels.at(-1).title, 'DEMO-1', "jay's view opened");
+  assert.deepStrictEqual(ui.infos, [LOST('DEMO-1')]);
+  assert.deepStrictEqual(ui.infoItems[0], ['Restart extensions', 'Not now']);
+  assert.deepStrictEqual(ui.executed.filter((c) => c[0] === RESTART), [[RESTART]], 'only because the user pressed it');
+  assert.ok(fs.existsSync(path.join(h.jayDir, 'issues', 'DEMO-1.jira')), "jay's tab keeps the file");
+});
+
+test('ticketView: after a detected failure, later clicks go straight to jay\'s view, with no second notice; jay.useAtlassianView routes to Atlassian again', async () => {
+  const h = start();
+  atlassian({ stuck: true });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle();
+  fireWatch(h); await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' }); await settle();
+  assert.strictEqual(atlCalls().length, 1, 'the second click never asks Atlassian');
+  assert.deepStrictEqual(ui.panels.map((p) => p.title), ['DEMO-1', 'DEMO-2']);
+  assert.strictEqual(ui.infos.length, 1, 'the notice once per window session');
+  assert.deepStrictEqual(ui.executed.filter((c) => c[0] === RESTART), [], 'never restarted by itself');
+  // signed in again in Atlassian: the user says so
+  atlassian();
+  await ui.commands['jay.useAtlassianView']();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-3' }); await settle();
+  assert.strictEqual(atlCalls().length, 2, 'Atlassian is asked again');
+  assert.strictEqual(ui.panels.length, 2);
+});
+
+test('ticketView: a second detected failure in the session (after jay.useAtlassianView) shows no second notice', async () => {
+  const h = start();
+  atlassian({ stuck: true });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' }); await settle(); fireWatch(h); await settle();
+  await ui.commands['jay.useAtlassianView']();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' }); await settle(); fireWatch(h); await settle();
+  assert.strictEqual(ui.closedTabs.length, 2);
+  assert.deepStrictEqual(ui.panels.map((p) => p.title), ['DEMO-1', 'DEMO-2']);
+  assert.strictEqual(ui.infos.length, 1);
+});
+
+test('ticketView: Atlassian stuck but jay\'s own load failed too (offline, not found): Atlassian is not blamed', async () => {
+  const h = start();
+  atlassian({ stuck: true });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-404' }); await settle();
+  fireWatch(h); await settle();
+  assert.deepStrictEqual([ui.closedTabs.length, ui.panels.length, ui.infos.length], [0, 0, 0], 'not found: as today');
+  h.world.fail = (p) => { if (/\/issue\/DEMO-2/.test(p)) throw new TypeError('fetch failed'); };
+  h.view.webview._receive({ type: 'open', key: 'DEMO-2' }); await settle();
+  fireWatch(h); await settle();
+  assert.deepStrictEqual([ui.closedTabs.length, ui.panels.length, ui.infos.length], [0, 0, 0], 'offline: as today');
+});
+
 test('jay.openTicket routes like a click: Atlassian by default, jay tab with ticketView "jay"', async () => {
   const h = start();
   atlassian();

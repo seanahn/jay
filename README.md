@@ -132,6 +132,12 @@ results" and on "Open KEY".
 - **A soft dependency:** jay doesn't require that extension. If it
   isn't installed, or its command fails, jay opens its own tab instead
   and says "Opened in jay's view: <reason>" once per window.
+- **When the Atlassian page loses its sign-in:** if its page stays
+  "Jira Issue" for 15 s while jay can read the ticket, jay closes it and
+  opens the ticket in its own tab. It offers **Restart extensions** once
+  (it never restarts by itself, since that restarts every extension in
+  the window). Clicks then go to jay's tab until you restart, or run
+  **jay: Use the Atlassian View Again** after signing in again there.
 - **The agent still knows the ticket.** On each click jay fetches the
   ticket and writes `~/.jay/issues/<KEY>.jira` and `current.jira`, as
   for its own tab. While the Atlassian page of a ticket jay opened is the

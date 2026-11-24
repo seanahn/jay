@@ -308,6 +308,35 @@ Atlassian's own extension ("Atlassian: Jira, Rovo Dev, Bitbucket",
 - **Issue files and closing tabs.** When an Atlassian issue tab that
   jay was tracking closes, jay removes that ticket's file, as it does for
   its own tabs.
+- **When Atlassian's page fails (0.2.6).** Seen on 2026-11-24: the page
+  showed "Site previously failed authentication" and Retry did nothing,
+  while jay and the Jira MCP worked. Atlassian (atlascode 4.0.33) marks a
+  site failed when creating its Jira client throws once. The mark clears
+  only when its sign-in changes or the extension restarts. Its
+  `showIssueForKey` swallows the error and opens the page anyway, titled
+  "Jira Issue", which a loaded page replaces with the key.
+  - **Detection:** after the command, the Atlassian tab it left titled
+    "Jira Issue" has 15 s to be titled with the key. If it is still
+    untitled then, and jay's own load of the ticket succeeded, Atlassian
+    failed. If jay's load failed too (offline, throttled, not found),
+    Atlassian isn't blamed and nothing changes.
+  - **On a failure:** jay closes that tab, opens the ticket in its own
+    view, and shows once per window session: "The Atlassian extension
+    lost its Jira sign-in, so <KEY> opened in jay's view." The buttons are
+    **Restart extensions** (`workbench.action.restartExtensionHost`) and
+    **Not now**. VS Code can't restart one extension, and jay never
+    restarts by itself: that restarts every extension in the window,
+    Claude Code sessions included.
+  - **Routing:** after a failure, clicks go straight to jay's view for the
+    rest of the window session *(builder's call, as the handoff
+    recommended)*. A restart resets this.
+  - **Back to Atlassian:** after signing in again in the Atlassian
+    extension without a restart, **jay: Use the Atlassian View Again**
+    (`jay.useAtlassianView`) routes clicks to Atlassian again. jay can't
+    see that sign-in itself. This was chosen over retrying Atlassian
+    after a delay *(builder's call)*.
+  - **The broken tab is closed,** not left behind jay's *(builder's
+    call)*. The only risk is a page that loads slower than 15 s.
 
 ### The ticket tab
 

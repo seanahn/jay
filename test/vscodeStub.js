@@ -20,7 +20,7 @@ function fakeWebview() {
 }
 
 function install() {
-  const ui = { providers: {}, serializers: {}, panels: [], commands: {}, executed: [], opened: [], focused: true, config: {}, workspaceConfig: {}, out: [], watchers: [], infos: [], copied: [], sessions: [], inputs: [], inputOptions: [], editors: {}, tab: null };
+  const ui = { providers: {}, serializers: {}, panels: [], commands: {}, executed: [], opened: [], focused: true, config: {}, workspaceConfig: {}, out: [], watchers: [], infos: [], copied: [], sessions: [], inputs: [], inputOptions: [], editors: {}, tab: null, closedTabs: [], infoItems: [], infoAnswer: null };
   const configChange = new Emitter();
   // the editor's Microsoft provider: ui.session(scopes, options) answers getSession; calls are recorded
   ui.session = () => undefined;
@@ -28,7 +28,9 @@ function install() {
   const tabChange = new Emitter(); const groupChange = new Emitter();
   // one editor group by default; ui.openTab / ui.closeTab / ui.setActiveTab change it and fire onDidChangeTabs
   const group0 = { viewColumn: 1, isActive: true, tabs: [], activeTab: null };
-  const tabGroups = { all: [group0], activeTabGroup: group0, onDidChangeTabs: tabChange.event, onDidChangeTabGroups: groupChange.event };
+  const tabGroups = { all: [group0], activeTabGroup: group0, onDidChangeTabs: tabChange.event, onDidChangeTabGroups: groupChange.event,
+    // as VS Code: closes the tab (or tabs) and resolves true; recorded in ui.closedTabs
+    close: async (t) => { for (const x of [].concat(t)) { ui.closedTabs.push(x); if (x.group.tabs.includes(x)) ui.closeTab(x); } return true; } };
   ui.extensions = {};   // id -> extension object, for vscode.extensions.getExtension
   const Uri = {
     file: (p) => ({ fsPath: p, path: p, scheme: 'file', toString: () => 'file://' + p }),
@@ -64,7 +66,8 @@ function install() {
       showInputBox: async (options) => { ui.inputOptions.push(options); return ui.inputs.shift(); },
       createOutputChannel: () => ({ appendLine: (l) => ui.out.push(l), dispose() {} }),
       showErrorMessage: (m) => { ui.out.push('error: ' + m); },
-      showInformationMessage: async (m) => { ui.infos.push(m); return undefined; },
+      // ui.infoAnswer(message, items) picks the button the "user" presses (undefined: dismissed); items are recorded in ui.infoItems
+      showInformationMessage: async (m, ...items) => { ui.infos.push(m); ui.infoItems.push(items); return ui.infoAnswer ? ui.infoAnswer(m, items) : undefined; },
     },
     commands: {
       registerCommand: (id, fn) => { ui.commands[id] = fn; return { dispose() {} }; },
