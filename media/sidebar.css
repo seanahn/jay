@@ -20,7 +20,7 @@ button.signin { margin: 8px; }
 .row.depth0 { padding-left: 0; }
 .row.depth1 { padding-left: 8px; }
 .row.depth2 { padding-left: 16px; }
-.twisty { display: inline-block; box-sizing: border-box; width: 12px; flex: none; text-align: center; }
+.twisty { display: inline-block; box-sizing: border-box; width: 8px; margin-right: -3px; flex: none; text-align: center; }
 .twisty.open { transform: rotate(90deg); }
 .row [class^="col-"] { flex: none; font-size: 11px; white-space: nowrap; color: var(--vscode-descriptionForeground); }
 .row .col-assignee.me { color: var(--vscode-charts-green); }

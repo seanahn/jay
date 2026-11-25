@@ -841,7 +841,13 @@ test('twisties share one fixed-width box: open is a class, the glyph is the same
   assert.ok(open.classList.contains('open')); assert.ok(!shut.classList.contains('open')); assert.ok(!leaf.classList.contains('open'));
   assert.strictEqual(open.textContent, shut.textContent); assert.strictEqual(leaf.textContent, '');
   for (const t of [open, shut, leaf]) assert.strictEqual(t.className.split(' ')[0], 'twisty');
-  assert.match(CSS, /^\.twisty \{[^}]*width: 12px;[^}]*flex: none;/m);
+  assert.match(CSS, /^\.twisty \{[^}]*width: 8px;[^}]*flex: none;/m);
   assert.match(CSS, /^\.twisty\.open \{ transform: rotate\(90deg\); \}/m);
-  assert.doesNotMatch(CSS, /\.twisty[^{]*\{[^}]*\bwidth: (?!12px)/);
+  assert.doesNotMatch(CSS, /\.twisty[^{]*\{[^}]*\bwidth: (?!8px)/);
+});
+
+test('css: the key sits close to the expand arrow', () => {
+  const rule = (CSS.match(/\.twisty \{([^}]*)\}/) || [])[1] || '';
+  assert.match(rule, /width: 8px/, 'a box just wider than the glyph');
+  assert.match(rule, /margin-right: -3px/, 'less than the row\'s gap between the arrow and the key');
 });
