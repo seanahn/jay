@@ -13,6 +13,7 @@ const WATCH_MS = 15000;
 const UNLOADED_TITLE = 'Jira Issue';
 const RESTART = 'workbench.action.restartExtensionHost';
 const RESTART_LABEL = 'Restart extensions';
+const FIRST_GROUP = 'workbench.action.focusFirstEditorGroup';
 const realTimers = { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id) };
 // VS Code prefixes a webview's type (e.g. "mainThreadWebview-react"); the Atlassian issue panel's own type is "react"
 const isAtlassianInput = (input) => !!input && typeof input.viewType === 'string' && input.viewType.endsWith('react');
@@ -151,7 +152,10 @@ function createAtlassianView(o) {
     // tracked and stamped first: the page's tab appears while the command runs, and the click's own fetch follows
     tracked.add(key); fetchedAt.set(key, o.now()); front = key;
     const before = new Set(allTabs());
-    return Promise.resolve().then(() => vscode.commands.executeCommand(COMMAND, key)).then(
+    // Atlassian's command opens its page in the active group and takes no column: focus the first group, as jay's tab uses
+    return Promise.resolve()
+      .then(() => vscode.commands.executeCommand(FIRST_GROUP)).catch(o.log)
+      .then(() => vscode.commands.executeCommand(COMMAND, key)).then(
       () => {
         // the tab the click opened: a new untitled Atlassian tab, else the active one if untitled
         const t = allTabs().find((x) => !before.has(x) && isUnloaded(x)) || (isUnloaded(activeTab()) ? activeTab() : null);

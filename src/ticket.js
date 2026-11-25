@@ -292,7 +292,8 @@ function createTickets(o) {
   function open(key) {
     const have = tabs.get(key);
     if (have) { have.shell.reveal(); return have; }
-    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, key, vscode.ViewColumn.Active,
+    // the first editor group, wherever focus last was (design 101, "Which view opens a ticket")
+    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, key, vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')] });
     return attach(panel, key);
   }

@@ -1230,6 +1230,26 @@ test('ticketView default: a click opens the Atlassian page, writes the file, mar
   assert.ok(h.fetch.calls.some((c) => /\/issue\/DEMO-1\/comment/.test(c.url) && /maxResults=50/.test(c.url)), 'the newest 50 comments');
 });
 
+test('ticketView: a click focuses the first editor group, then opens the Atlassian page there', async () => {
+  const h = start();
+  atlassian();
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' });
+  await settle();
+  const ids = ui.executed.map((c) => c[0]);
+  const focus = ids.indexOf('workbench.action.focusFirstEditorGroup');
+  assert.ok(focus >= 0, 'the first group is focused');
+  assert.ok(focus < ids.indexOf(ATL_COMMAND), 'before the Atlassian command');
+});
+
+test("jay's own tab opens in the first editor group", async () => {
+  const h = start({ config: { 'jay.ticketView': 'jay' } });
+  await settle();
+  h.view.webview._receive({ type: 'open', key: 'DEMO-1' });
+  await settle();
+  assert.strictEqual(ui.panels.at(-1).column, 1);
+});
+
 test('ticketView default, unfocused window: the file and seen, but no current.jira', async () => {
   const h = start({ focused: false });
   atlassian();

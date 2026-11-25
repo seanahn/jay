@@ -337,6 +337,17 @@ Atlassian's own extension ("Atlassian: Jira, Rovo Dev, Bitbucket",
     after a delay *(builder's call)*.
   - **The broken tab is closed,** not left behind jay's *(builder's
     call)*. The only risk is a page that loads slower than 15 s.
+- **Which editor group (0.2.7).** Sean, 2026-11-25: ticket pages had
+  started opening in a group on the right instead of the middle. Both
+  Atlassian's page and jay's tab opened in the active editor group, and
+  a click in the sidebar doesn't change which group is active. So once
+  Sean clicked into the right group, every ticket went there. Offered
+  "always the first group" or "the group the last ticket went to", Sean
+  chose the first group. jay's tab is created in the first group
+  (`ViewColumn.One`). Atlassian's command takes only the key, so before
+  running it jay runs `workbench.action.focusFirstEditorGroup`. A ticket
+  already open in another group is moved there by Atlassian; jay's own
+  tab is revealed where it already is.
 
 ### The ticket tab
 

@@ -40,7 +40,7 @@ function install() {
   function createWebviewPanel(viewType, title, column, options) {
     const disposed = new Emitter(), viewState = new Emitter();
     const panel = {
-      viewType, title, options, webview: fakeWebview(), visible: true, active: true, disposed: false, revealed: 0,
+      viewType, title, column, options, webview: fakeWebview(), visible: true, active: true, disposed: false, revealed: 0,
       reveal() { this.revealed++; this.visible = true; this.active = true; viewState.fire({ webviewPanel: this }); },
       dispose() { if (this.disposed) return; this.disposed = true; disposed.fire(); },
       onDidDispose: disposed.event, onDidChangeViewState: viewState.event,

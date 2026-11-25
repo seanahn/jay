@@ -138,6 +138,8 @@ results" and on "Open KEY".
   (it never restarts by itself, since that restarts every extension in
   the window). Clicks then go to jay's tab until you restart, or run
   **jay: Use the Atlassian View Again** after signing in again there.
+- **Where it opens:** in the first (leftmost) editor group, whichever
+  group you last clicked in.
 - **The agent still knows the ticket.** On each click jay fetches the
   ticket and writes `~/.jay/issues/<KEY>.jira` and `current.jira`, as
   for its own tab. While the Atlassian page of a ticket jay opened is the
