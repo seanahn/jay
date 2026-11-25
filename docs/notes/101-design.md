@@ -206,9 +206,10 @@ ignored, and `summary` is always shown.
   "Unassigned"), the status, and then the priority, due date, original
   estimate and labels when they're set (Sean, 2026-11-19).
 - **The key's color shows who has the ticket** (Sean, 2026-11-19;
-  changed 2026-11-25: "do others in red and unassigned no color"):
+  changed 2026-11-25: "do others in red and unassigned no color", then purple):
   - green (`charts.green`) when it's Sean's;
-  - red (`charts.red`) when it's someone else's;
+  - purple (`charts.purple`) when it's someone else's (red read as
+    "something is wrong");
   - no color of its own (the row's) when it's unassigned or assigned to
     a placeholder account, which means it's up for grabs.
 
