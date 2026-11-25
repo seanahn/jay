@@ -489,9 +489,10 @@ test('the key cell carries owner-me / owner-other / owner-none, in the tree and 
   assert.ok(jiraRows(p)[0].querySelector('.col-key').classList.contains('owner-none'));
 });
 
-test('css colors the key by owner and beats the grey other-row color', () => {
-  for (const [o, c] of [['me', 'green'], ['other', 'blue'], ['none', 'orange']])
+test('css colors the key by owner: mine green, someone else\'s red, unassigned left plain', () => {
+  for (const [o, c] of [['me', 'green'], ['other', 'red']])
     assert.match(CSS, new RegExp(`\\.row \\.col-key\\.owner-${o}\\s*\\{[^}]*color:\\s*var\\(--vscode-charts-${c}\\)`));
+  assert.doesNotMatch(CSS, /\.col-key\.owner-none/, 'no rule: an unassigned key keeps the row\'s colour');
 });
 
 test('clicking a row with a short key still posts the full key', () => {

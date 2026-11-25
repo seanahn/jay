@@ -205,11 +205,12 @@ ignored, and `summary` is always shown.
   line: the full key and type, the full title, the assignee (or
   "Unassigned"), the status, and then the priority, due date, original
   estimate and labels when they're set (Sean, 2026-11-19).
-- **The key's color shows who has the ticket** (Sean, 2026-11-19):
+- **The key's color shows who has the ticket** (Sean, 2026-11-19;
+  changed 2026-11-25: "do others in red and unassigned no color"):
   - green (`charts.green`) when it's Sean's;
-  - blue (`charts.blue`) when it's someone else's;
-  - orange (`charts.orange`) when it's unassigned or assigned to a
-    placeholder account, which means it's up for grabs.
+  - red (`charts.red`) when it's someone else's;
+  - no color of its own (the row's) when it's unassigned or assigned to
+    a placeholder account, which means it's up for grabs.
 
   The default columns no longer include `assignee`. It's still
   available in `jay.columns`.

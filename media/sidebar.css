@@ -26,8 +26,7 @@ button.signin { margin: 8px; }
 .row .col-assignee.me { color: var(--vscode-charts-green); }
 .row .col-key { color: inherit; }
 .row .col-key.owner-me { color: var(--vscode-charts-green); }
-.row .col-key.owner-other { color: var(--vscode-charts-blue); }
-.row .col-key.owner-none { color: var(--vscode-charts-orange); }
+.row .col-key.owner-other { color: var(--vscode-charts-red); }
 .row .col-summary, .row .col-title { flex: 1 1 0; min-width: 0; font-size: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; }
 .row.mine { color: var(--vscode-foreground); }
 .row.other { color: var(--vscode-descriptionForeground); }
