@@ -126,7 +126,8 @@ each one under its epic, with "No epic" last.
 `jay.ticketView` decides what a click opens, in the tree, in "Jira
 results" and on "Open KEY".
 
-- **`atlassian` (the default):** the issue page of Atlassian's own
+- **`jay` (the default):** jay's own ticket tab.
+- **`atlassian`:** the issue page of Atlassian's own
   extension, "Atlassian: Jira, Rovo Dev, Bitbucket"
   (`atlassian.atlascode`). jay keeps its sidebar.
 - **A soft dependency:** jay doesn't require that extension. If it

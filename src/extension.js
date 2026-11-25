@@ -115,7 +115,7 @@ function activate(context, deps = {}) {
     // Confluence is created below; these reach it lazily (design 102, "In Jira tickets")
     confluence: new Proxy({}, { get: (_, k) => (...a) => conf.confluence[k](...a) }), siteUrl: () => conf.siteUrl(), openPage: (u) => conf.openPage(u) });
   // jay.ticketView: the one way a click in the sidebar opens a ticket (design 101, "Which view opens a ticket")
-  const atlassian = createAtlassianView({ vscode, tickets, mirror, view: () => cfg('ticketView', 'atlassian'), timers: deps.timers || realTimers,
+  const atlassian = createAtlassianView({ vscode, tickets, mirror, view: () => cfg('ticketView', 'jay'), timers: deps.timers || realTimers,
     markSeen: (k) => { eventsRef.seen(k); eventsRef.save(); }, isFocused, log, now });
   // Confluence (design 102): the page tabs, tree, Mentions and My pages, with pollers of their own
   const conf = createConfluenceSide({ vscode, extensionUri: context.extensionUri, s, me, store, cfg, sidebar, fetch: fetchFn, jayDir, now, isFocused,

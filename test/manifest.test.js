@@ -19,7 +19,7 @@ test('manifest', () => {
   for (const k of ['jay.site', 'jay.signIn.tokenFile', 'jay.signIn.refreshCommand']) assert.ok(!['resource', 'language-overridable', 'machine', 'machine-overridable'].includes(props[k].scope), k);
   assert.strictEqual(props['jay.period'].default, 'quarter');
   assert.deepStrictEqual(props['jay.period'].enum, ['quarter', 'sprint', 'fixVersion']);
-  assert.strictEqual(props['jay.ticketView'].default, 'atlassian');
+  assert.strictEqual(props['jay.ticketView'].default, 'jay');
   assert.deepStrictEqual(props['jay.ticketView'].enum, ['atlassian', 'jay']);
   assert.strictEqual(props['jay.ticketView'].enumDescriptions.length, 2);
   assert.strictEqual(p.extensionDependencies, undefined, 'the Atlassian extension is a soft dependency');

@@ -279,8 +279,8 @@ Sean asked for this on 2026-11-20. He likes the ticket page of
 Atlassian's own extension ("Atlassian: Jira, Rovo Dev, Bitbucket",
 `atlassian.atlascode`) for the middle pane. jay keeps its sidebar.
 
-- **`jay.ticketView`** is either `"atlassian"` (the default) or
-  `"jay"`. It decides what a click opens, in the tree, in Jira results,
+- **`jay.ticketView`** is either `"jay"` (the default since 0.2.8:
+  the Atlassian page proved hard to read and use) or `"atlassian"`. It decides what a click opens, in the tree, in Jira results,
   and on "Open <KEY>".
 - **`"atlassian"`:** jay runs `atlascode.jira.showIssueForKey` with the
   key, which opens the Atlassian extension's issue page. jay's own tab
@@ -818,7 +818,7 @@ cache, then refreshes it in full.
 | `jay.quarter.patterns` | the three templates above | How epics mark their quarter |
 | `jay.placeholderAssignees` | `[]` | Display names or account ids that count as unclaimed |
 | `jay.columns` | `["key","summary","status"]` | Tree and search-result columns, in order: key, summary, assignee, status, type, priority, due, labels, estimate |
-| `jay.ticketView` | `"atlassian"` | `"atlassian"`: open tickets in the Atlassian extension's page, falling back to jay's own tab; `"jay"`: jay's own tab |
+| `jay.ticketView` | `"jay"` | `"atlassian"`: open tickets in the Atlassian extension's page, falling back to jay's own tab; `"jay"`: jay's own tab |
 | `jay.agentFiles` | true | Write `~/.jay/issues/*.jira` and `current.jira` |
 
 `jay.site`, `jay.signIn.tokenFile` and `jay.signIn.refreshCommand` are read only from your user settings (or the remote's settings in a remote window; no `machine` scope, which remote windows would ignore), so a repo's workspace settings can't send the token elsewhere or pick a command to run.

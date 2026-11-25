@@ -2,7 +2,7 @@
   "name": "jay",
   "displayName": "jay",
   "description": "Jira and Confluence in a sidebar of its own: your epics and tickets by quarter, and your Confluence pages, each an editor tab, with their text available to the AI agent beside them. Not affiliated with Atlassian.",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "publisher": "seanahn",
   "license": "MIT",
   "icon": "media/listing-icon.png",
@@ -200,7 +200,7 @@
           "type": "string",
           "enum": ["atlassian", "jay"],
           "enumDescriptions": ["The issue page of Atlassian's own extension (atlassian.atlascode), falling back to jay's tab when it isn't installed or fails", "jay's own ticket tab"],
-          "default": "atlassian",
+          "default": "jay",
           "description": "Which view a click on a ticket opens, in the tree, in Jira results and on \"Open KEY\"."
         },
         "jay.agentFiles": {
